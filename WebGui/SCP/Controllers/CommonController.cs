@@ -218,12 +218,30 @@ namespace SCP.Controllers
             return result;
         }
 
+        /// <summary>
+        /// 將 Web 區域代碼轉換為海康 MapCode
+        /// </summary>
+        private string GetMapCodeFromArea(string area)
+        {
+            var mapping = _configuration.GetSection("MapCodeMapping").Get<Dictionary<string, string>>();
+            if (mapping != null && mapping.ContainsKey(area))
+            {
+                return mapping[area];
+            }
+            // 如果找不到映射，返回原始 area（向後兼容）
+            return area;
+        }
+
         private List<oShuttle> GetAgv(string area)
         {
             #region [讀取車輛狀態及位置]
-            List<oShuttle> AgvPositions = _DBContext.oShuttle.Where(x => x.MapCode == area).ToList();
+            // 將 Web 區域代碼轉換為海康 MapCode
+            string mapCode = GetMapCodeFromArea(area);
+            
+            List<oShuttle> AgvPositions = _DBContext.oShuttle.Where(x => x.MapCode == mapCode).ToList();
             foreach (var item in AgvPositions)
             {
+                // 使用原始 area 進行座標轉換（因為 appsettings 使用 FHT2-1F 作為 key）
                 item.PosX = ConvertX(item.PosX, area);
                 item.PosY = ConvertY(item.PosY, area);
             }

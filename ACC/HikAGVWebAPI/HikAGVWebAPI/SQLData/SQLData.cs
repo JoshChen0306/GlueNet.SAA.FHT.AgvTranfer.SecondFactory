@@ -81,6 +81,7 @@ namespace HikAGVWebAPI.App_Start
                                    ,PosX = '{agvStatus?.posX.PadRight(6, '0')}'
                                    ,PosY = '{agvStatus?.posY.PadRight(6, '0')}'
                                    ,RobotDir = '{agvStatus?.robotDir}'
+                                   ,MapCode = '{agvStatus?.mapCode}'
                               where ShuttleId = {agvStatus?.robotCode} ";
             mSql.WriteSqlByAutoOpen(sSQL);
         }
