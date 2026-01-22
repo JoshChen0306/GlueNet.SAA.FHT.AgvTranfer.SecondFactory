@@ -694,18 +694,15 @@ namespace SCP.Controllers
                 // 建立派送任務 (oNeed) - 帶入起點站的 RackId
                 string rackId = port.RackId ?? "";
                 
-                // I 區回送到 K 區時，寫入 ^RETURN 標記（避免回送物料再次被派送）
+                // 空板回送 WorkOrder 為空（與其他區域一致）
+                // 任務完成後 HaveFlag 會根據 WorkOrder 是否為空設定為 "1"（空板）
                 string workOrderForRelease = "";
-                if (stationArea == "I")
-                {
-                    workOrderForRelease = "^RETURN";
-                }
                 
                 string sql = "INSERT INTO oNeed (ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag) VALUES({0},{1},{2},{3},{4},{5},{6})";
                 _DBContext.Database.ExecuteSqlRaw(sql,
                     stationNo,                                    // ObjStation (起點)
                     rackId,                                       // RackId (從起點站讀取)
-                    workOrderForRelease,                          // WorkOrder (I區回送帶 ^RETURN)
+                    workOrderForRelease,                          // WorkOrder (空板回送為空)
                     emptySlot.StationNo,                          // EndStation (終點)
                     "Web",                                        // TaskSource
                     DateTime.Now.ToString("yyyyMMddHHmmssffffff"), // TaskDateTime
