@@ -252,10 +252,24 @@ namespace SCP.Controllers
         {
             #region [讀取車輛狀態及位置]
             List<oShuttle> AgvPositions = _DBContext.oShuttle.ToList();
+            var mapping = _configuration.GetSection("MapCodeMapping").Get<Dictionary<string, string>>();
+
             foreach (var item in AgvPositions)
             {
-                item.PosX = ConvertX(item.PosX, item.MapCode);
-                item.PosY = ConvertY(item.PosY, item.MapCode);
+                // 反向尋找 Area Code (例如 "DD" -> "FHT1-3F")
+                string area = mapping.FirstOrDefault(x => x.Value == item.MapCode).Key;
+
+                // 如果找不到對應的區域，就使用 MapCode 當作預設 (雖然可能找不到設定)
+                if (string.IsNullOrEmpty(area))
+                {
+                    area = item.MapCode;
+                }
+
+                string posX = item.PosX;
+                string posY = item.PosY;
+
+                item.PosX = ConvertX(posX, area);
+                item.PosY = ConvertY(posY, area);
             }
             #endregion
             return AgvPositions;
