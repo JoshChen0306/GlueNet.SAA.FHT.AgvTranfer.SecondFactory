@@ -530,8 +530,17 @@ namespace HikAGVWebAPI
 
                         if (ack?.code != "0")
                         {
-                            mLog.TraceOut($"Cancel Task Failed! TaskCode: {DeleteMission.TaskCode}, Message: {ack?.message}", Log.LogType.NONE);
-                            continue; // 取消失敗，暫不刪除，等待下次重試
+                            // 檢查是否為「任務已結束或已取消」的情況，若是則允許刪除本地記錄
+                            bool isTaskAlreadyCancelled = !string.IsNullOrEmpty(ack?.message) &&
+                                (ack.message.Contains("已结束") || ack.message.Contains("已取消") || ack.message.Contains("不存在"));
+
+                            if (!isTaskAlreadyCancelled)
+                            {
+                                mLog.TraceOut($"Cancel Task Failed! TaskCode: {DeleteMission.TaskCode}, Message: {ack?.message}", Log.LogType.NONE);
+                                continue; // 取消失敗，暫不刪除，等待下次重試
+                            }
+
+                            mLog.TraceOut($"Task already cancelled in RCS, proceed to delete local record. TaskCode: {DeleteMission.TaskCode}", Log.LogType.NONE);
                         }
                     }
 
