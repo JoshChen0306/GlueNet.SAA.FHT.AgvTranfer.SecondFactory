@@ -1,0 +1,5 @@
+New-SelfSignedCertificate `
+    -DnsName "192.168.4.10", "localhost", "WIN-BV1RUH0I0JT" `
+    -CertStoreLocation "cert:\LocalMachine\My" `
+    -FriendlyName "FHT-SCP-HTTPS" `
+    -NotAfter (Get-Date).AddYears(10)
