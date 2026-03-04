@@ -416,7 +416,7 @@ $(function () {
                 }
                 break;
             case "T":
-                // V cut區可選: O(左上料), P(右上料) - 需要供單號
+                // V cut區可選: O(左上料), P(右上料), S(清洗區) - 需要供單號
                 // 顯示掃描機台按鈕
                 $("#machineScanRow").show();
                 break;
@@ -537,9 +537,10 @@ $(function () {
                 filterEndStationOptions("T", "0");
                 break;
             case "T":
-                // 顯示 O, P 區空架
+                // 顯示 O, P, S 區空架
                 filterEndStationOptions("O", "0");
                 filterEndStationOptions("P", "0");
+                filterEndStationOptions("S", "0");
                 break;
             case "Q":
                 filterEndStationOptions("S", "0");
@@ -665,7 +666,7 @@ $(function () {
                     // 快取中沒有工單資料，需要驗證
                     var workOrder = $("#WorkOrder").val();
                     if (!workOrder || !workOrder.trim()) {
-                        // M 和 T 區顯示「供單號」，其他區顯示「工單」
+                        // M 和 T 區顯示「供單號」，其他區顯示「工單'
                         var fieldName = (beginStation.substring(0, 1) === 'M' || beginStation.substring(0, 1) === 'T') ? '供單號' : '工單';
                         alert('請輸入' + fieldName);
                         allValid = false;
@@ -946,10 +947,10 @@ $(function () {
             return;
         }
 
-        // 驗證 2：是否為有效的終點區域（O/P 區）
+        // 驗證 2：是否為有效的終點區域（O/P/S 區）
         var areaPrefix = matchedStation.substring(0, 1);
-        if (areaPrefix !== "O" && areaPrefix !== "P") {
-            alert("無效的終點區域：" + matchedStation + "\n只能派送到 O 區或 P 區");
+        if (areaPrefix !== "O" && areaPrefix !== "P" && areaPrefix !== "S") {
+            alert("無效的終點區域：" + matchedStation + "\n只能派送到 O 區、P 區或 S 區");
             return;
         }
 
@@ -1587,6 +1588,7 @@ function filterBeginStationOptions(selectedValue) {
                 // 更新顯示文字：StationNo + WorkOrder
                 var workOrder = station.workOrder || "";
                 var displayWorkOrder = workOrder;
+                // 截斷過長的文字
                 if (displayWorkOrder.length > 35) {
                     displayWorkOrder = displayWorkOrder.substring(0, 35) + "...";
                 }
@@ -1832,7 +1834,7 @@ function filterBeginStationByDestination(destinationArea) {
             return workOrder.includes("^VCUT") && !workOrder.includes("^VCUT^DONE");
         }).show();
     } else if (destinationArea === "O" || destinationArea === "P") {
-        // 終點是 O/P 區（OP上料區）：顯示 M 區一般物料 + T 區已加工完成
+        // 終點是 O/P 區：顯示 M 區一般物料 + T 區已加工完成
         $('#BeginStation option').filter(function () {
             var tracname = $(this).val();
             if (!tracname) return false;
@@ -1850,6 +1852,19 @@ function filterBeginStationByDestination(destinationArea) {
                 return workOrder.includes("^VCUT^DONE");
             }
             return false;
+        }).show();
+    } else if (destinationArea === "S") {
+        // 終點是 S 區（清洗區）：【僅顯示】 T 區已加工完成物料
+        $('#BeginStation option').filter(function () {
+            var tracname = $(this).val();
+            if (!tracname || !tracname.startsWith("T")) return false;
+
+            var station = stationCache[tracname];
+            if (!station || station.haveFlag !== "3") return false;
+
+            var workOrder = station.workOrder || "";
+            // T 區：只顯示含 ^VCUT^DONE 標記的已加工物料
+            return workOrder.includes("^VCUT^DONE");
         }).show();
     }
 }
