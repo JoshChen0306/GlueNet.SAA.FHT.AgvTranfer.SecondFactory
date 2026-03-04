@@ -59,29 +59,28 @@
                         </div>
                     </div>
 
-                    <!-- 快速選擇按鈕 -->
-                    <div class="row mb-4">
-                        <div class="col-sm-3"></div>
-                        <div class="col-sm-9">
-                            <button type="button" id="btnSelectAll" class="btn btn-outline-secondary btn-sm me-2" disabled>
-                                <i class="fa-solid fa-check-double me-1"></i>全選
-                            </button>
-                            <button type="button" id="btnDeselectAll" class="btn btn-outline-secondary btn-sm" disabled>
-                                <i class="fa-solid fa-xmark me-1"></i>取消全選
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 操作按鈕 -->
+                    <!-- 將快速選擇按鈕與操作按鈕合併到同一排，避免切掉 -->
                     <div class="row">
                         <div class="col-sm-3"></div>
                         <div class="col-sm-9">
-                            <button type="button" id="btnSave" class="btn btn-primary me-2" disabled>
-                                <i class="fa-solid fa-save me-1"></i>儲存
-                            </button>
-                            <button type="button" id="btnCancel" class="btn btn-secondary" disabled>
-                                <i class="fa-solid fa-times me-1"></i>取消
-                            </button>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <button type="button" id="btnSelectAll" class="btn btn-outline-secondary btn-sm me-2" disabled>
+                                        <i class="fa-solid fa-check-double me-1"></i>全選
+                                    </button>
+                                    <button type="button" id="btnDeselectAll" class="btn btn-outline-secondary btn-sm" disabled>
+                                        <i class="fa-solid fa-xmark me-1"></i>取消全選
+                                    </button>
+                                </div>
+                                <div>
+                                    <button type="button" id="btnSave" class="btn btn-primary me-2" disabled>
+                                        <i class="fa-solid fa-save me-1"></i>儲存
+                                    </button>
+                                    <button type="button" id="btnCancel" class="btn btn-secondary" disabled>
+                                        <i class="fa-solid fa-times me-1"></i>取消
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -113,7 +112,7 @@
     $(function () {
         var originalRoutes = [];
 
-        // 觸發 iframe resize（確保父頁面的 iFrameResize 能正確計算高度）
+        // 觸發 iframe resize
         if (window.parentIFrame) {
             window.parentIFrame.size();
         }
@@ -123,7 +122,6 @@
             var userId = $(this).val();
             
             if (!userId) {
-                // 未選擇使用者，禁用所有控制項
                 $(".route-checkbox").prop("disabled", true).prop("checked", false);
                 $("#btnSelectAll, #btnDeselectAll, #btnSave, #btnCancel").prop("disabled", true);
                 originalRoutes = [];
@@ -136,21 +134,15 @@
                 url: "/Route/GetUserRoutes",
                 data: { userId: userId },
                 success: function (data) {
-                    // 啟用勾選框
                     $(".route-checkbox").prop("disabled", false);
                     $("#btnSelectAll, #btnDeselectAll, #btnSave, #btnCancel").prop("disabled", false);
-
-                    // 清除之前的勾選
                     $(".route-checkbox").prop("checked", false);
 
-                    // 勾選使用者擁有的路線權限
                     if (data && data.length > 0) {
                         data.forEach(function (routeId) {
                             $("#route_" + routeId).prop("checked", true);
                         });
                     }
-
-                    // 保存原始狀態
                     originalRoutes = data || [];
                 },
                 error: function (error) {
@@ -177,13 +169,11 @@
                 return;
             }
 
-            // 取得勾選的路線 ID
             var selectedRoutes = [];
             $(".route-checkbox:checked").each(function () {
                 selectedRoutes.push($(this).val());
             });
 
-            // 發送儲存請求
             $.ajax({
                 type: "POST",
                 url: "/Route/SaveUserRoutes",
@@ -193,10 +183,7 @@
                     routeIds: selectedRoutes
                 }),
                 success: function (response) {
-                    // 更新原始狀態
                     originalRoutes = selectedRoutes;
-                    
-                    // 顯示成功訊息
                     $("#successMessage").text(response.message || "權限儲存成功！");
                     var modal = new bootstrap.Modal(document.getElementById('successModal'));
                     modal.show();
@@ -207,12 +194,9 @@
             });
         });
 
-        // 取消按鈕 - 還原到原始狀態
+        // 取消按鈕
         $("#btnCancel").on("click", function () {
-            // 清除所有勾選
             $(".route-checkbox").prop("checked", false);
-            
-            // 還原原始勾選狀態
             originalRoutes.forEach(function (routeId) {
                 $("#route_" + routeId).prop("checked", true);
             });
