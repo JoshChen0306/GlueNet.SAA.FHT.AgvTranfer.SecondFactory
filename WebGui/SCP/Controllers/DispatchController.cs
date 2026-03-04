@@ -64,35 +64,6 @@ namespace SCP.Controllers
                     .Distinct()
                     .ToList();
 
-                // ★ 補入 1F 傳統區域（A、C、D、F 不納入路線權限管控，依 groupId 判斷）★
-                // 這些區域由舊機制的 switch-case 控制，不依賴 pRoute
-                var legacy1FAreas = new List<string>();
-                switch (groupId)
-                {
-                    case "1": // 管理員：全部 1F 區域
-                    case "7": // 超級管理員
-                        legacy1FAreas.AddRange(new[] { "A", "C", "D", "F" });
-                        break;
-                    case "2": // 備料區
-                        legacy1FAreas.Add("A");
-                        break;
-                    case "6": // 上下料區
-                        legacy1FAreas.AddRange(new[] { "C", "D" });
-                        break;
-                    case "5": // 下料區
-                        legacy1FAreas.Add("F");
-                        break;
-                }
-
-                // 合併傳統 1F 區域到 allowedSourceAreas 和 allowedAllAreas
-                foreach (var area in legacy1FAreas)
-                {
-                    if (!allowedSourceAreas.Contains(area))
-                        allowedSourceAreas.Add(area);
-                    if (!allowedAllAreas.Contains(area))
-                        allowedAllAreas.Add(area);
-                }
-
                 // 只使用「一般派送」起點區域過濾派送區域選單
                 filterAreas = areas.Where(item => allowedSourceAreas.Contains(item.Value));
             }
