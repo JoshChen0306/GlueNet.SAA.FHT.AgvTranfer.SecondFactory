@@ -91,26 +91,39 @@ namespace HikAGVWebAPI
         /// </summary>
         /// <param name="beginStation">起點站點</param>
         /// <param name="endStation">終點站點</param>
-        /// <param name="taskTypeMap">TaskType 對照表字串</param>
-        /// <param name="defaultTaskType">預設 TaskType（同樓層用）</param>
+        /// <param name="sameFloorTaskTypeMap">各樓層站內 TaskType 對照表（格式: "1F:F002,2F:F001"）</param>
+        /// <param name="crossFloorTaskTypeMap">跨樓層 TaskType 對照表（格式: "1F>3F:F13Test,..."）</param>
+        /// <param name="defaultTaskType">全域預設 TaskType（找不到對應設定時使用）</param>
         /// <returns>對應的 TaskType</returns>
-        public string GetTaskType(string beginStation, string endStation, 
-                                  string taskTypeMap, string defaultTaskType)
+        public string GetTaskType(string beginStation, string endStation,
+                                  string sameFloorTaskTypeMap, string crossFloorTaskTypeMap, string defaultTaskType)
         {
             var beginFloor = GetFloor(beginStation);
             var endFloor = GetFloor(endStation);
-            
-            // 無法判斷樓層或同樓層：返回預設 TaskType
-            if (beginFloor == null || endFloor == null || beginFloor == endFloor)
+
+            // 無法判斷樓層：返回預設 TaskType
+            if (beginFloor == null || endFloor == null)
                 return defaultTaskType;
-            
-            // 跨樓層：查詢對照表
-            var map = ParseTaskTypeMap(taskTypeMap);
+
+            // 同樓層：查詢 SameFloorTaskTypeMap
+            if (beginFloor == endFloor)
+            {
+                if (!string.IsNullOrEmpty(sameFloorTaskTypeMap))
+                {
+                    var sameFloorMap = ParseTaskTypeMap(sameFloorTaskTypeMap);
+                    if (sameFloorMap.TryGetValue(beginFloor, out string sameFloorTaskType))
+                        return sameFloorTaskType;
+                }
+                return defaultTaskType;
+            }
+
+            // 跨樓層：查詢 CrossFloorTaskTypeMap
+            var map = ParseTaskTypeMap(crossFloorTaskTypeMap);
             var routeKey = $"{beginFloor}>{endFloor}";
-            
+
             if (map.TryGetValue(routeKey, out string taskType))
                 return taskType;
-            
+
             // 找不到對應路線，返回預設值
             return defaultTaskType;
         }

@@ -477,10 +477,11 @@ namespace HikAGVWebAPI
                 
                 // 根據路線查詢對應的 TaskType
                 string actualTaskType = pathCalculator.GetTaskType(
-                    oMission.BeginStation, 
+                    oMission.BeginStation,
                     oMission.EndStation,
+                    hikAGV.AGVSettings.SameFloorTaskTypeMap,
                     hikAGV.AGVSettings.CrossFloorTaskTypeMap,
-                    TaskType);  // 預設 TaskType（同樓層）
+                    TaskType);  // 預設 TaskType（全域 fallback）
                 mLog.TraceOut($"TaskType: {actualTaskType}, Route: {pathCalculator.GetFloor(oMission.BeginStation)}>{pathCalculator.GetFloor(oMission.EndStation)}", Log.LogType.NONE);
                 
                 string PositionCode = string.Join(";", fullPath.Select(p => $"{p},00"));

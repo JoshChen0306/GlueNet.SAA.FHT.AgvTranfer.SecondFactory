@@ -442,91 +442,113 @@ namespace HikAGVWebAPITests.App_Start
 
         #region GetTaskType 路線對照表測試
 
-        private const string TaskTypeMap = "1F>3F:F13Test,3F>1F:F31Test,3F>4F:F34Test,4F>3F:F43Test,2F>4F:F24Test,4F>2F:F42Test";
+        private const string SameFloorMap = "1F:F002,2F:F001";
+        private const string CrossFloorMap = "1F>3F:F13Test,3F>1F:F31Test,3F>4F:F34Test,4F>3F:F43Test,2F>4F:F24Test,4F>2F:F42Test";
         private const string DefaultTaskType = "F001";
 
         [TestMethod]
-        public void GetTaskType_同樓層2F_M1到O1_應該返回預設TaskType()
+        public void GetTaskType_同樓層2F_M1到O1_無SameFloorMap_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("M1", "O1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("M1", "O1", "", CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
-        public void GetTaskType_同樓層1F_A1到C1_應該返回預設TaskType()
+        public void GetTaskType_同樓層1F_A1到C1_無SameFloorMap_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("A1", "C1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("A1", "C1", "", CrossFloorMap, DefaultTaskType);
+            Assert.AreEqual("F001", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_同樓層1F_A1到C1_有SameFloorMap_應該返回F002()
+        {
+            var result = _calculator.GetTaskType("A1", "C1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            Assert.AreEqual("F002", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_同樓層2F_M1到O1_有SameFloorMap_應該返回F001()
+        {
+            var result = _calculator.GetTaskType("M1", "O1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            Assert.AreEqual("F001", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_同樓層3F_I1到J1_有SameFloorMap但無3F設定_應該返回預設TaskType()
+        {
+            var result = _calculator.GetTaskType("I1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_1F到3F_G1到J1_應該返回F13Test()
         {
-            var result = _calculator.GetTaskType("G1", "J1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("G1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F13Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_3F到1F_J1到G1_應該返回F31Test()
         {
-            var result = _calculator.GetTaskType("J1", "G1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("J1", "G1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F31Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_3F到4F_J1到K1_應該返回F34Test()
         {
-            var result = _calculator.GetTaskType("J1", "K1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("J1", "K1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F34Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_4F到3F_K1到J1_應該返回F43Test()
         {
-            var result = _calculator.GetTaskType("K1", "J1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("K1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F43Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_2F到4F_H1到K1_應該返回F24Test()
         {
-            var result = _calculator.GetTaskType("H1", "K1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("H1", "K1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F24Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_4F到2F_K1到H1_應該返回F42Test()
         {
-            var result = _calculator.GetTaskType("K1", "H1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("K1", "H1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F42Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_未定義路線_1F到2F_應該返回預設TaskType()
         {
-            // 1F>2F 不在對照表中
-            var result = _calculator.GetTaskType("G1", "H1", TaskTypeMap, DefaultTaskType);
+            // 1F>2F 不在 CrossFloorMap 中
+            var result = _calculator.GetTaskType("G1", "H1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
-        public void GetTaskType_空對照表_應該返回預設TaskType()
+        public void GetTaskType_空CrossFloorMap_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("G1", "J1", "", DefaultTaskType);
+            var result = _calculator.GetTaskType("G1", "J1", "", "", DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_Null站點_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType(null, "J1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType(null, "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_空字串站點_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("", "J1", TaskTypeMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
@@ -534,7 +556,7 @@ namespace HikAGVWebAPITests.App_Start
         public void GetTaskType_對照表格式含空格_應該正確解析()
         {
             var mapWithSpaces = "1F>3F : F13Test , 3F>1F : F31Test";
-            var result = _calculator.GetTaskType("G1", "J1", mapWithSpaces, DefaultTaskType);
+            var result = _calculator.GetTaskType("G1", "J1", "", mapWithSpaces, DefaultTaskType);
             Assert.AreEqual("F13Test", result);
         }
 
