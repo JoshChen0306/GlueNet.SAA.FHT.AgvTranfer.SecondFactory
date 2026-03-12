@@ -189,7 +189,6 @@ namespace svrPair
                     case "G":   // ★★★ G區（1F電梯暫存區）→ J區（3F插針室）：Release 回送空板 ★★★
                     case "K":   // ★★★ K區（4F烘烤前入貨區）→ H區（2F成型後）：Release 回送空板 ★★★
                     case "I":   // ★★★ I區（3F品檢區）→ L區（4F烘烤後）：Release 回送空板 / NG回送 ★★★
-                    case "L":   // ★★★ L區（4F烘烤後）→ I區（3F品檢區）★★★
                         WriteLog("05.處理系統配對");
                         ProcessoNeedToRequire(dr["ObjStation"].ToString().Substring(0, 1), dr);
                         break;
