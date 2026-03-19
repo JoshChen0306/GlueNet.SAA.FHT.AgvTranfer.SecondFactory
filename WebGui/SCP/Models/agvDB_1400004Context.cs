@@ -39,6 +39,8 @@ public partial class agvDB_1400004Context : DbContext
 
     public virtual DbSet<pUserRoute> pUserRoute { get; set; }
 
+    public virtual DbSet<oPortBinding> oPortBinding { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<oMission>(entity =>
@@ -268,6 +270,16 @@ public partial class agvDB_1400004Context : DbContext
 
             entity.Property(e => e.UserId).HasMaxLength(20);
             entity.Property(e => e.RouteId).HasMaxLength(30);
+        });
+
+        modelBuilder.Entity<oPortBinding>(entity =>
+        {
+            entity.HasKey(e => e.LoadingPort);
+
+            entity.Property(e => e.LoadingPort).HasMaxLength(20);
+            entity.Property(e => e.UnloadingPort).HasMaxLength(20);
+            entity.Property(e => e.FallbackAreas).HasMaxLength(100);
+            entity.Property(e => e.UseFlag).HasMaxLength(1);
         });
 
         OnModelCreatingPartial(modelBuilder);

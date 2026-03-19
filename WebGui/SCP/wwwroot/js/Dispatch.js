@@ -96,6 +96,18 @@ var floorToMapArea = {
 // 全域變數：站點資料快取
 var stationCache = {};
 var isCacheLoaded = false;
+var portBindingList = [];
+
+// 載入上下料區綁定站點清單（有綁定的站點允許 HaveFlag=1）
+$.ajax({
+    type: "GET",
+    url: "/Dispatch/GetPortBindingList",
+    async: false,
+    success: function (data) {
+        portBindingList = data || [];
+        console.log("已載入 PortBinding 站點清單:", portBindingList);
+    }
+});
 // 初始化 window 層級的地圖區域追蹤變數（供 Map.js 和 Dispatch.js 共用）
 if (!window.currentMapArea) {
     window.currentMapArea = 'FHT2-1F';
@@ -694,8 +706,12 @@ $(function () {
                 alert('派送起點為空貨架，請重新選擇站點');
                 allValid = false;
             } else if (allValid && endStationData && endStationData.haveFlag !== "0" && area !== "C") {
-                alert('派送終點已有貨架，請重新選擇站點');
-                allValid = false;
+                // 有 oPortBinding 綁定且為空平板時允許通過
+                var isBindingPort = portBindingList.indexOf(endStation) !== -1;
+                if (!(isBindingPort && endStationData.haveFlag === "1")) {
+                    alert('派送終點已有貨架，請重新選擇站點');
+                    allValid = false;
+                }
             }
         }
 
@@ -804,6 +820,12 @@ $(function () {
                 // 處理成功響應
                 console.log("表單資料已成功送出", response);
 
+                // 關閉確認派送 Modal
+                var confirmModal = bootstrap.Modal.getInstance($('#dispatchModalToggle'));
+                if (confirmModal) confirmModal.hide();
+                var rejectModal = bootstrap.Modal.getInstance($('#RejectModalToggle'));
+                if (rejectModal) rejectModal.hide();
+
                 // 先儲存當前樓層，避免 reset 後遺失
                 var currentFloor = $("#Floor").val();
                 console.log("派送成功，保持當前樓層:", currentFloor);
@@ -829,7 +851,12 @@ $(function () {
             error: function (error) {
                 // 處理錯誤響應
                 console.error("表單資料送出失敗", error);
-                if (error.responseJSON.message) { alert("派送失敗:" + error.responseJSON.message) }
+                // 關閉確認派送 Modal
+                var confirmModal = bootstrap.Modal.getInstance($('#dispatchModalToggle'));
+                if (confirmModal) confirmModal.hide();
+                var rejectModal = bootstrap.Modal.getInstance($('#RejectModalToggle'));
+                if (rejectModal) rejectModal.hide();
+                if (error.responseJSON && error.responseJSON.message) { alert("派送失敗:" + error.responseJSON.message) }
 
             }
         });
@@ -955,10 +982,17 @@ $(function () {
         }
 
         // 驗證 3：站點是否為空架 (HaveFlag = 0)
+        // 有 oPortBinding 綁定的站點允許 HaveFlag=1（空平板，後端會自動回收）
         var stationData = stationCache[matchedStation];
         if (stationData && stationData.haveFlag !== "0") {
-            alert("終點站點已有貨物：" + matchedStation + "\n請選擇空架");
-            return;
+            var isBindingPort = portBindingList.indexOf(matchedStation) !== -1;
+            if (isBindingPort && stationData.haveFlag === "1") {
+                // 有綁定且是空平板，允許選擇（後端 svrPair 會自動回收）
+                console.log("站點 " + matchedStation + " 有空平板，但有綁定設定，允許派送");
+            } else {
+                alert("終點站點已有貨物：" + matchedStation + "\n請選擇空架");
+                return;
+            }
         }
 
         console.log("找到有效站點:", matchedStation);

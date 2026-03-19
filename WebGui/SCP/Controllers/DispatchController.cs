@@ -150,6 +150,16 @@ namespace SCP.Controllers
             return PartialView("_DispatchPartial");
         }
 
+        [HttpGet]
+        public IActionResult GetPortBindingList()
+        {
+            var list = _DBContext.oPortBinding
+                .Where(b => b.UseFlag == "Y")
+                .Select(b => b.LoadingPort)
+                .ToList();
+            return Ok(list);
+        }
+
         public IActionResult InsertoNeed([FromBody] Dictionary<string, string> need)
         {
 
@@ -169,6 +179,58 @@ namespace SCP.Controllers
                 objStation = need["EndStation"];
             }
             if (string.IsNullOrEmpty(endStation)) return BadRequest(new { message = "暫存區無空架" });
+
+            // ★★★ 空平板自動回收卡控：檢查目的地是否有 oPortBinding 綁定 ★★★
+            var binding = _DBContext.oPortBinding
+                .FirstOrDefault(b => b.LoadingPort == endStation && b.UseFlag == "Y");
+
+            if (binding != null)
+            {
+                var loadingPort = _DBContext.oPort.FirstOrDefault(p => p.StationNo == endStation);
+                var unloadingPort = _DBContext.oPort.FirstOrDefault(p => p.StationNo == binding.UnloadingPort);
+
+                if (loadingPort == null || unloadingPort == null)
+                {
+                    return BadRequest(new { message = $"上料區 {endStation} 或下料區 {binding.UnloadingPort} 站點不存在，請至「上下料區綁定設定」頁面檢查設定是否正確" });
+                }
+
+                string loadingHaveFlag = loadingPort.HaveFlag ?? "";
+                string unloadingHaveFlag = unloadingPort.HaveFlag ?? "";
+
+                if (loadingHaveFlag == "1")
+                {
+                    // 上料區有空平板，需搬走
+                    if (unloadingHaveFlag == "1")
+                    {
+                        // 下料區已有空平板，O/P 空平板送 FallbackAreas
+                        string fallbackSlot = FindFallbackEmptySlot(binding.FallbackAreas, endStation);
+                        if (string.IsNullOrEmpty(fallbackSlot))
+                        {
+                            return BadRequest(new { message = $"上料區 {endStation} 有空平板需回收，但回收候補區域（{binding.FallbackAreas}）皆無空位，請先清理候補區域的貨架" });
+                        }
+                        // FallbackAreas 有空位，放行（後端 svrPair 自動處理回收）
+                    }
+                    else if (unloadingHaveFlag == "0")
+                    {
+                        // 下料區是空架，空平板可直接送過去（最理想），放行
+                    }
+                    else
+                    {
+                        // 下料區有料盤（HaveFlag == 3 等），阻擋
+                        return BadRequest(new { message = $"下料區 {binding.UnloadingPort} 目前有料盤（HaveFlag=3），請先將料盤取走或完成下料" });
+                    }
+                }
+                else
+                {
+                    // 上料區無空平板
+                    if (unloadingHaveFlag != "1")
+                    {
+                        // 上料區和下料區都沒空平板
+                        return BadRequest(new { message = $"上料區 {endStation} 及下料區 {binding.UnloadingPort} 皆無空平板，請先於上料區或下料區人工放置空平板" });
+                    }
+                    // 下料區有空平板，直接放行
+                }
+            }
 
             string sql = "INSERT INTO oNeed (ObjStation,RackId,WorkOrder,EndStation,TaskSource,TaskDateTime,AssignFlag) VALUES({0},{1},{2},{3},{4},{5},{6})";
             try
@@ -714,6 +776,39 @@ namespace SCP.Controllers
             {
                 return StatusCode(500, new { message = "Release 失敗", error = ex.Message });
             }
+        }
+        /// <summary>
+        /// 依 FallbackAreas 設定依序找空位（HaveFlag=0、UseFlag=Y、未被註冊、未被其他任務佔用）
+        /// </summary>
+        private string FindFallbackEmptySlot(string fallbackAreas, string excludeStation)
+        {
+            if (string.IsNullOrEmpty(fallbackAreas)) return null;
+
+            var pendingEndStations = _DBContext.oNeed
+                .Where(n => n.AssignFlag == null || n.AssignFlag == "")
+                .Select(n => n.EndStation)
+                .ToList();
+
+            string[] areas = fallbackAreas.Split(',');
+            foreach (string area in areas)
+            {
+                string trimmedArea = area.Trim();
+                if (string.IsNullOrEmpty(trimmedArea)) continue;
+
+                var slot = _DBContext.oPort
+                    .Where(p => p.Block == trimmedArea &&
+                                p.HaveFlag == "0" &&
+                                p.UseFlag == "Y" &&
+                                (p.BgnToEnd == null || p.BgnToEnd == "") &&
+                                p.StationNo != excludeStation &&
+                                !pendingEndStations.Contains(p.StationNo))
+                    .OrderBy(p => p.Port)
+                    .FirstOrDefault();
+
+                if (slot != null) return slot.StationNo;
+            }
+
+            return null;
         }
     }
 

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>二樓站內運輸空平板自動派送 - 流程圖</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        h1 { text-align: center; color: #333; }
+        h2 { color: #555; margin-top: 40px; border-bottom: 2px solid #ddd; padding-bottom: 8px; }
+        .mermaid {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>二樓站內運輸空平板自動派送 - 流程圖</h1>
+
+<h2>流程一：前端派送卡控（OP 按下派送按鈕時）</h2>
+<div class="note">
+    <strong>觸發時機：</strong>OP 從 M區（雷雕）或 T區（V Cut）派送物料到上料區（O/P）時，按下派送按鈕觸發檢查。
+</div>
+
+<div class="mermaid">
+flowchart TD
+    A([OP 按下派送按鈕<br/>物料 → 上料區 O/P]) --> B{目的地是否有<br/>oPortBinding 綁定？}
+    B -->|沒有綁定| C[正常派送<br/>建立物料 oNeed]
+    B -->|有綁定| D[查詢對應下料區 Q]
+    D --> E{上料區 O/P<br/>HaveFlag == 1？<br/>有空平板？}
+    E -->|NO| E2{下料區 Q<br/>HaveFlag == 1？<br/>有空平板？}
+    E2 -->|YES| C
+    E2 -->|NO| M[/彈窗提示：<br/>上料區及下料區皆無空平板<br/>請先人工放置/]
+    M --> L([結束，不建立任務])
+    E -->|YES| F{下料區 Q<br/>HaveFlag == 1？<br/>有空平板？}
+    F -->|YES| F2[Q 已有空平板<br/>O/P 空平板需搬走騰位]
+    F2 --> I{依 FallbackAreas 設定<br/>依序找空位放 O/P 空平板<br/>例：M → Q → R}
+    I -->|找到空位| J[放行派送<br/>建立物料 oNeed<br/>後端自動處理回收]
+    I -->|全滿| K[/彈窗提示：<br/>目前沒有可放置的貨架/]
+    K --> L
+    F -->|NO| G{下料區 Q<br/>HaveFlag == 0？<br/>空架可接收？}
+    G -->|YES| G2[空平板送到下料區 Q<br/>最理想情境]
+    G2 --> C
+    G -->|NO<br/>Q 有料盤| P[/彈窗提示：<br/>下料區有料盤<br/>請先處理下料區/]
+    P --> L
+
+    style A fill:#4CAF50,color:white
+    style C fill:#2196F3,color:white
+    style G2 fill:#2196F3,color:white
+    style J fill:#2196F3,color:white
+    style K fill:#FF9800,color:white
+    style M fill:#FF9800,color:white
+    style P fill:#FF9800,color:white
+    style L fill:#9E9E9E,color:white
+</div>
+
+<h2>流程二：後端 svrPair 自動串接（GenerateoRequireByoNeed）</h2>
+<div class="note">
+    <strong>觸發時機：</strong>svrPair 主循環每 50ms 執行一次，處理 oNeed 轉 oRequire 時觸發。
+</div>
+
+<div class="mermaid">
+flowchart TD
+    A([svrPair 主循環<br/>GenerateoRequireByoNeed]) --> B[取得待處理 oNeed]
+    B --> C{oNeed 目的地<br/>是否在 oPortBinding<br/>中有綁定？}
+    C -->|沒有綁定| D[正常轉 oRequire<br/>繼續派送流程]
+    C -->|有綁定| E[查詢對應下料區 Q]
+    E --> F{上料區 O/P<br/>HaveFlag == 1？<br/>有空平板？}
+    F -->|NO| F2{下料區 Q<br/>HaveFlag == 1？<br/>有空平板？}
+    F2 -->|YES| D
+    F2 -->|NO| SKIP[跳過此物料 oNeed<br/>等待下一輪循環]
+    F -->|YES| G{下料區 Q<br/>HaveFlag == 1？<br/>有空平板？}
+    G -->|YES| G1{是否已存在<br/>空平板回收 oNeed？}
+    G1 -->|YES| G1W[回收任務進行中<br/>跳過物料 oNeed<br/>等待下一輪循環]
+    G1 -->|NO| G2[產生空平板回收 oNeed<br/>起點：O/P<br/>終點：依 FallbackAreas 找空位]
+    G2 --> G1W
+    G1W --> GK([等待回收完成])
+    GK -.->|O/P 空平板搬走後<br/>Q 仍有空平板| GL([下一輪循環<br/>物料 oNeed 放行])
+    G -->|NO| H{下料區 Q<br/>HaveFlag == 0？<br/>空架可接收？}
+    H -->|YES| H1{是否已存在<br/>空平板回收 oNeed？}
+    H1 -->|YES| H1W[回收任務進行中<br/>跳過物料 oNeed<br/>等待下一輪循環]
+    H1 -->|NO| H2[產生空平板回收 oNeed<br/>起點：O/P<br/>終點：下料區 Q]
+    H2 --> H1W
+    H1W --> HK([等待回收完成])
+    HK -.->|Q 收到空平板<br/>HaveFlag 變為 1| HL([下一輪循環<br/>物料 oNeed 放行])
+    H -->|NO<br/>Q 有料盤| SKIP2[跳過此物料 oNeed<br/>等待下一輪循環<br/>前端已卡控此情境]
+
+    D --> M[oRequire → oMission<br/>→ 派發給 RCS]
+    M --> N([AGV 執行搬運])
+
+    style A fill:#4CAF50,color:white
+    style D fill:#2196F3,color:white
+    style G2 fill:#E91E63,color:white
+    style H2 fill:#E91E63,color:white
+    style G1W fill:#FF9800,color:white
+    style H1W fill:#FF9800,color:white
+    style GL fill:#4CAF50,color:white
+    style HL fill:#4CAF50,color:white
+    style SKIP fill:#9E9E9E,color:white
+    style SKIP2 fill:#9E9E9E,color:white
+    style N fill:#4CAF50,color:white
+</div>
+
+<h2>流程三：完整任務串接時序（情境 A：Q 站為空架，空平板直接送 Q）</h2>
+<div class="note">
+    <strong>情境：</strong>O1 有空平板（HaveFlag=1）、Q1 為空架（HaveFlag=0），OP 要從 M 區派送物料到 O1
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    participant OP as OP 操作員
+    participant SCP as SCP 前端
+    participant API as DispatchController
+    participant DB as 資料庫
+    participant SVR as svrPair
+    participant RCS as AGV RCS
+
+    OP->>SCP: 按下派送按鈕（M區物料 → O1）
+    SCP->>API: 呼叫派送 API
+    API->>DB: 查詢 oPortBinding（O1 → Q1）
+    API->>DB: 查詢 Q1 HaveFlag（!= 1，無空平板）
+    API->>DB: 查詢 O1 HaveFlag（== 1，有空平板）
+    API->>DB: 查詢 Q1 HaveFlag（== 0，空架可接收）
+    API->>DB: 建立物料 oNeed（M區 → O1）
+    API-->>SCP: 派送成功
+
+    Note over SVR: svrPair 主循環
+
+    SVR->>DB: 讀取物料 oNeed（目的地 O1）
+    SVR->>DB: 查詢 oPortBinding（O1 → Q1）
+    SVR->>DB: 查詢 Q1 HaveFlag（!= 1，無空平板）
+    SVR->>DB: 查詢 Q1 HaveFlag（== 0，空架可接收）
+    SVR->>DB: 產生空平板回收 oNeed（O1 → Q1）
+    SVR->>DB: 物料 oNeed 跳過，不轉 oRequire
+
+    Note over SVR: 處理空平板回收任務
+
+    SVR->>DB: 空平板回收 oNeed → oRequire → oMission
+    SVR->>RCS: 派發空平板回收任務（O1 → Q1）
+    RCS-->>SVR: 任務完成 Callback
+    SVR->>DB: Q1 HaveFlag 更新為 1（空平板到位）
+
+    Note over SVR: 下一輪循環
+
+    SVR->>DB: 讀取物料 oNeed（目的地 O1）
+    SVR->>DB: 查詢 Q1 HaveFlag（== 1，有空平板）
+    SVR->>DB: 物料 oNeed → oRequire → oMission
+    SVR->>RCS: 派發物料搬運任務（M區 → O1）
+    RCS-->>SVR: 任務完成 Callback
+    Note over OP,RCS: 完成！物料已送達 O1，Q1 有空平板可收料
+</div>
+
+<h2>流程四：完整任務串接時序（情境 B：Q 站已有空平板，O/P 空平板送 FallbackAreas）</h2>
+<div class="note">
+    <strong>情境：</strong>O1 有空平板（HaveFlag=1）、Q1 已有空平板（HaveFlag=1），OP 要從 M 區派送物料到 O1。<br/>
+    Q1 已滿足收料條件，但 O1 的空平板需搬走才能放物料，送至 FallbackAreas。
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    participant OP as OP 操作員
+    participant SCP as SCP 前端
+    participant API as DispatchController
+    participant DB as 資料庫
+    participant SVR as svrPair
+    participant RCS as AGV RCS
+
+    OP->>SCP: 按下派送按鈕（M區物料 → O1）
+    SCP->>API: 呼叫派送 API
+    API->>DB: 查詢 oPortBinding（O1 → Q1）
+    API->>DB: 查詢 O1 HaveFlag（== 1，有空平板需搬走）
+    API->>DB: 查詢 Q1 HaveFlag（== 1，已有空平板，無法再放）
+    API->>DB: 依 FallbackAreas（M,Q,R）找空位（找到 M3）
+    API->>DB: 建立物料 oNeed（M區 → O1）
+    API-->>SCP: 派送成功
+
+    Note over SVR: svrPair 主循環
+
+    SVR->>DB: 讀取物料 oNeed（目的地 O1）
+    SVR->>DB: 查詢 oPortBinding（O1 → Q1）
+    SVR->>DB: 查詢 O1 HaveFlag（== 1，有空平板）
+    SVR->>DB: 查詢 Q1 HaveFlag（== 1，已有空平板）
+    SVR->>DB: 依 FallbackAreas 找空位（M3）
+    SVR->>DB: 產生空平板回收 oNeed（O1 → M3）
+    SVR->>DB: 物料 oNeed 跳過，不轉 oRequire
+
+    Note over SVR: 處理空平板回收任務
+
+    SVR->>DB: 空平板回收 oNeed → oRequire → oMission
+    SVR->>RCS: 派發空平板回收任務（O1 → M3）
+    RCS-->>SVR: 任務完成 Callback
+    SVR->>DB: O1 HaveFlag 更新（空平板已搬走）
+
+    Note over SVR: 下一輪循環
+
+    SVR->>DB: 讀取物料 oNeed（目的地 O1）
+    SVR->>DB: 查詢 O1 HaveFlag（!= 1，空平板已清除）
+    SVR->>DB: 查詢 Q1 HaveFlag（== 1，有空平板可收料）
+    SVR->>DB: 物料 oNeed → oRequire → oMission
+    SVR->>RCS: 派發物料搬運任務（M區 → O1）
+    RCS-->>SVR: 任務完成 Callback
+    Note over OP,RCS: 完成！物料已送達 O1，Q1 有空平板可收料
+</div>
+
+<h2>流程五：阻擋情境（Q 站有料盤）</h2>
+<div class="note">
+    <strong>情境：</strong>O1 有空平板（HaveFlag=1）、Q1 有料盤（HaveFlag=3），前端直接阻擋。
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    participant OP as OP 操作員
+    participant SCP as SCP 前端
+    participant API as DispatchController
+    participant DB as 資料庫
+
+    OP->>SCP: 按下派送按鈕（M區物料 → O1）
+    SCP->>API: 呼叫派送 API
+    API->>DB: 查詢 oPortBinding（O1 → Q1）
+    API->>DB: 查詢 O1 HaveFlag（== 1，有空平板）
+    API->>DB: 查詢 Q1 HaveFlag（== 3，有料盤）
+    API-->>SCP: 錯誤：下料區有料盤，請先處理下料區
+    SCP-->>OP: 彈窗提示，不建立任何任務
+    Note over OP: OP 需先處理 Q1（取走料盤、放空平板）後再重新派送
+</div>
+
+</body>
+</html>

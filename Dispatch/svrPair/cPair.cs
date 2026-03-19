@@ -180,6 +180,11 @@ namespace svrPair
                     case "P":   // <--- ★★★ 新增：2F OP上料區(右) -> M/Q/R (Release回送空板) ★★★
                     case "S":   // <--- ★★★ 新增：2F 清洗區 -> M/Q/R (Release回送空板) ★★★
                     case "N":   // <--- ★★★ 新增：2F 廢料回收區 -> M/Q/R (Release回送空板) ★★★
+                        // ★★★ 空平板自動回收卡控：檢查目的地是否有 oPortBinding 綁定 ★★★
+                        if (CheckAndHandleEmptyPlateRecovery(dr))
+                        {
+                            break; // 空平板卡控處理中，跳過此 oNeed
+                        }
                         WriteLog("05.處理平板配對");
                         ProcessoNeedToRequire(dr["ObjStation"].ToString().Substring(0, 1), dr);
                         break;
@@ -479,6 +484,174 @@ namespace svrPair
                 rslt = true;
             }
             return rslt;
+        }
+        #endregion
+
+        #region [2-1A .次程序 == CheckAndHandleEmptyPlateRecovery == 空平板自動回收卡控]
+        /// <summary>
+        /// 檢查物料派送目的地是否有 oPortBinding 綁定，若有則進行空平板卡控。
+        /// 回傳 true 表示需要卡控（跳過此 oNeed），false 表示不需卡控（繼續正常流程）。
+        /// </summary>
+        private bool CheckAndHandleEmptyPlateRecovery(DataRow dr)
+        {
+            string endStation = dr["EndStation"].ToString().Trim();
+            string objStation = dr["ObjStation"].ToString().Trim();
+
+            if (string.IsNullOrEmpty(endStation)) return false;
+
+            // 查詢目的地是否有 oPortBinding 綁定
+            DataTable dtBinding = mSql.QuerySqlByAutoOpen(
+                "SELECT * FROM oPortBinding WHERE LoadingPort = '" + endStation + "' AND UseFlag = 'Y'").Tables[0];
+
+            if (dtBinding.Rows.Count == 0) return false; // 無綁定，不卡控
+
+            string unloadingPort = dtBinding.Rows[0]["UnloadingPort"].ToString().Trim();
+            string fallbackAreas = dtBinding.Rows[0]["FallbackAreas"].ToString().Trim();
+
+            // 取得上料區（目的地）和下料區的狀態
+            DataTable dtLoadingPort = mSql.QuerySqlByAutoOpen(
+                "SELECT HaveFlag FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+            DataTable dtUnloadingPort = mSql.QuerySqlByAutoOpen(
+                "SELECT HaveFlag FROM oPort WHERE StationNo = '" + unloadingPort + "'").Tables[0];
+
+            if (dtLoadingPort.Rows.Count == 0 || dtUnloadingPort.Rows.Count == 0) return false;
+
+            string loadingHaveFlag = dtLoadingPort.Rows[0]["HaveFlag"].ToString().Trim();
+            string unloadingHaveFlag = dtUnloadingPort.Rows[0]["HaveFlag"].ToString().Trim();
+
+            // ====== 情境判斷 ======
+
+            // 上料區無空平板
+            if (loadingHaveFlag != "1")
+            {
+                if (unloadingHaveFlag == "1")
+                {
+                    // 下料區有空平板，不需回收，正常派送
+                    WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 無空平板，下料區 {1} 已有空平板，正常派送", endStation, unloadingPort));
+                    return false;
+                }
+                else
+                {
+                    // 上料區和下料區都沒空平板，跳過等待
+                    WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 及下料區 {1} 皆無空平板，跳過等待人工處理", endStation, unloadingPort));
+                    return true;
+                }
+            }
+
+            // 上料區有空平板，需搬走
+            // 檢查是否已存在空平板回收任務（oNeed / oRequire / oMission 皆需檢查，避免重複產生）
+            DataTable dtExistingRecovery = mSql.QuerySqlByAutoOpen(
+                "SELECT * FROM oNeed WHERE ObjStation = '" + endStation + "' AND TaskSource = 'PLATE_RECOVERY' AND (AssignFlag IS NULL OR RTRIM(AssignFlag) = '' OR AssignFlag IN ('W','R'))").Tables[0];
+
+            if (dtExistingRecovery.Rows.Count > 0)
+            {
+                WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 已有空平板回收 oNeed 進行中，跳過物料 oNeed", endStation));
+                return true;
+            }
+
+            DataTable dtExistingRequire = mSql.QuerySqlByAutoOpen(
+                "SELECT * FROM oRequire WHERE ObjStation = '" + endStation + "' AND EndStation != '" + endStation + "' AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')").Tables[0];
+
+            if (dtExistingRequire.Rows.Count > 0)
+            {
+                WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 已有回收 oRequire 進行中（終點: {1}），跳過物料 oNeed", endStation, dtExistingRequire.Rows[0]["EndStation"]));
+                return true;
+            }
+
+            DataTable dtExistingMission = mSql.QuerySqlByAutoOpen(
+                "SELECT * FROM oMission WHERE BeginStation = '" + endStation + "' AND EndStation != '" + endStation + "' AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')").Tables[0];
+
+            if (dtExistingMission.Rows.Count > 0)
+            {
+                WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 已有回收 oMission 進行中（終點: {1}），跳過物料 oNeed", endStation, dtExistingMission.Rows[0]["EndStation"]));
+                return true;
+            }
+
+            // 決定空平板回收目的地
+            string recoveryTarget = "";
+
+            if (unloadingHaveFlag == "1")
+            {
+                // 下料區已有空平板（B 條件已滿足），送 FallbackAreas
+                recoveryTarget = FindFallbackEmptySlot(fallbackAreas, endStation);
+                if (string.IsNullOrEmpty(recoveryTarget))
+                {
+                    WriteLog(string.Format("05A.空平板卡控 >> 下料區 {0} 已有空平板，FallbackAreas ({1}) 全滿，跳過等待", unloadingPort, fallbackAreas));
+                    return true;
+                }
+                WriteLog(string.Format("05A.空平板卡控 >> 下料區 {0} 已有空平板，空平板送至 FallbackAreas: {1}", unloadingPort, recoveryTarget));
+            }
+            else if (unloadingHaveFlag == "0")
+            {
+                // 下料區是空架，空平板直接送下料區（最理想）
+                recoveryTarget = unloadingPort;
+                WriteLog(string.Format("05A.空平板卡控 >> 下料區 {0} 為空架，空平板直接送下料區", unloadingPort));
+            }
+            else
+            {
+                // 下料區有料盤（HaveFlag == 3），前端已卡控，跳過等待
+                WriteLog(string.Format("05A.空平板卡控 >> 下料區 {0} 有料盤 (HaveFlag={1})，跳過等待人工處理", unloadingPort, unloadingHaveFlag));
+                return true;
+            }
+
+            // 產生空平板回收 oNeed
+            string rackId = "";
+            DataTable dtRack = mSql.QuerySqlByAutoOpen(
+                "SELECT RackId FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+            if (dtRack.Rows.Count > 0)
+            {
+                rackId = dtRack.Rows[0]["RackId"].ToString().Trim();
+            }
+
+            mSql.WriteSqlByAutoOpen(
+                "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag) VALUES('" +
+                endStation + "','" + rackId + "','','" + recoveryTarget + "','PLATE_RECOVERY','" +
+                GetTaskDateTimeIncludeRandom(true) + "','')");
+
+            WriteLog(string.Format("05A.空平板卡控 >> 產生空平板回收 oNeed: {0} → {1}", endStation, recoveryTarget));
+            return true; // 卡住物料 oNeed，等回收完成後下一輪再處理
+        }
+        #endregion
+
+        #region [2-1B .次程序 == FindFallbackEmptySlot == 依 FallbackAreas 設定依序找空位]
+        /// <summary>
+        /// 依 FallbackAreas（逗號分隔的區域代碼）依序找空位（HaveFlag=0、UseFlag=Y、未被註冊）。
+        /// 回傳找到的空位 StationNo，找不到回傳空字串。
+        /// </summary>
+        private string FindFallbackEmptySlot(string fallbackAreas, string excludeStation)
+        {
+            if (string.IsNullOrEmpty(fallbackAreas)) return "";
+
+            // 取得已有待處理任務的終點站，避免重複指派
+            DataTable dtPending = mSql.QuerySqlByAutoOpen(
+                "SELECT EndStation FROM oNeed WHERE (AssignFlag IS NULL OR RTRIM(AssignFlag) = '')").Tables[0];
+            var pendingStations = new System.Collections.Generic.HashSet<string>();
+            foreach (DataRow row in dtPending.Rows)
+            {
+                pendingStations.Add(row["EndStation"].ToString().Trim());
+            }
+
+            string[] areas = fallbackAreas.Split(',');
+            foreach (string area in areas)
+            {
+                string trimmedArea = area.Trim();
+                if (string.IsNullOrEmpty(trimmedArea)) continue;
+
+                DataTable dt = mSql.QuerySqlByAutoOpen(
+                    "SELECT StationNo FROM oPort WHERE Block = '" + trimmedArea +
+                    "' AND HaveFlag = '0' AND UseFlag = 'Y' AND (BgnToEnd IS NULL OR RTRIM(BgnToEnd) = '') ORDER BY Port").Tables[0];
+
+                foreach (DataRow row in dt.Rows)
+                {
+                    string stationNo = row["StationNo"].ToString().Trim();
+                    if (stationNo != excludeStation && !pendingStations.Contains(stationNo))
+                    {
+                        return stationNo;
+                    }
+                }
+            }
+
+            return "";
         }
         #endregion
 
