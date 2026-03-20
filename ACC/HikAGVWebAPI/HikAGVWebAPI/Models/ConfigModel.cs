@@ -218,6 +218,19 @@ namespace HikAGVWebAPI
                 this[nameof(LowBattery)] = value;
             }
         }
+
+        [ConfigurationProperty(nameof(TestMode), DefaultValue = "false", IsRequired = false)]
+        public string TestMode
+        {
+            get
+            {
+                return (string)this[nameof(TestMode)];
+            }
+            set
+            {
+                this[nameof(TestMode)] = value;
+            }
+        }
     }
     #endregion Log Config
 

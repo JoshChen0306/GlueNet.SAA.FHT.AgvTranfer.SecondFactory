@@ -101,6 +101,12 @@ namespace HikAGVWebAPI
 
         protected internal string PostData(Dictionary<string, string> Data)
         {
+            if (FHtSettings.TestMode == "true")
+            {
+                mLog.TraceOut($"[TestMode] PostData skipped (FHtSettings.TestMode=true)", Log.LogType.NONE);
+                return "TestMode";
+            }
+
             HttpResponseMessage response = null;
 
             try

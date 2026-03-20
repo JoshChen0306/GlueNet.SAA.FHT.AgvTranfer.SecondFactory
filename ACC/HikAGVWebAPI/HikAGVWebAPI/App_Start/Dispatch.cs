@@ -225,7 +225,7 @@ namespace HikAGVWebAPI
                             mLog.TraceOut($"Update AGV Data! {agvData?.ToString()}", Log.LogType.NONE);
 
                             //電量低於 40 跟 25 上報 FHt
-                            //CheckBattery(agvData);
+                            CheckBattery(agvData);
                         }
                     }
 
@@ -291,6 +291,12 @@ namespace HikAGVWebAPI
 
         protected internal string PostData(Dictionary<string, string> Data)
         {
+            if (FHtSettings.TestMode == "true")
+            {
+                mLog.TraceOut($"[TestMode] PostData skipped (FHtSettings.TestMode=true)", Log.LogType.NONE);
+                return "TestMode";
+            }
+
             HttpResponseMessage response = null;
 
             try
