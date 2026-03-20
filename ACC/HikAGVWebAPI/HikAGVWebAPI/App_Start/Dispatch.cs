@@ -331,52 +331,90 @@ namespace HikAGVWebAPI
                     return;
 
                 mLog.TraceOut($"========================================== oMission Start! ==========================================", Log.LogType.NONE);
-                List<oMissionModel> oMissionRun = oAllMissions.Where(x => x.OkFlag == "R").ToList();
-                if (oMissionRun.Count == 2)//判斷只執行 2 筆任務
-                {
-                    mLog.TraceOut($"Two Missions Is Running! {oMissionRun?.ToString()}", Log.LogType.NONE);
-                    return;
-                }
 
-                oMissionModel oMission = oAllMissions.Where(x => string.IsNullOrEmpty(x.OkFlag)).FirstOrDefault();
-                if (oMission != null)
+                List<oMissionModel> oMissionRun     = oAllMissions.Where(x => x.OkFlag == "R").ToList();
+                List<oMissionModel> pendingMissions = oAllMissions.Where(x => string.IsNullOrEmpty(x.OkFlag)).ToList();
+
+                // ─── 跨樓層車輛任務 ──────────────────────────────────────────
+                var crossFloorPending = _crossFloorManager != null
+                    ? pendingMissions.Where(m => _crossFloorManager.IsMissionForCrossFloorShuttle(m)).ToList()
+                    : new List<oMissionModel>();
+                var crossFloorRunning = _crossFloorManager != null
+                    ? oMissionRun.Where(m => _crossFloorManager.IsMissionForCrossFloorShuttle(m)).ToList()
+                    : new List<oMissionModel>();
+
+                if (crossFloorPending.Any())
                 {
-                    _crossFloorManager?.OnNewTaskArrived();
-                    mLog.TraceOut($"Get All Missions Data! {oAllMissions?.ToString()}", Log.LogType.NONE);
-                    mLog.TraceOut($"Get oMission Data! {oMission?.ToString()}", Log.LogType.NONE);
-                    SchedulingTaskAck ack = GetSchedulingTask(hikAGV.AGVSettings.AGVTaskType, oMission);
-                    mLog.TraceOut($"Get Scheduling Task Ack Data! {ack?.ToString()}", Log.LogType.NONE);
-                    if (ack?.code == "0")
+                    _crossFloorManager.OnNewTaskArrived();
+
+                    if (crossFloorRunning.Count == 0)
                     {
-                        DateTime drNow = DateTime.Now;
-                        oMission.OkFlag = "R";
-                        oMission.TaskCode = ack?.data;
-                        oMission.BeginTime = drNow.ToString("yyyyMMddHHmmssffffff");
-                        ubActivationModel ubActivation = new ubActivationModel()
+                        oMissionModel nextMission = _crossFloorManager.SelectNextMission(crossFloorPending);
+                        if (nextMission != null)
                         {
-                            TaskDateTime = oMission.TaskDateTime,
-                            ShuttleStation = oMission.BeginStation,
-                            //ShuttleId = oMission.ShuttleId,
-                            TaskType = oMission.OkFlag,
-                            BeginStation = oMission.BeginStation,
-                            EndStation = oMission.EndStation,
-                            ReceivingTime = drNow.ToString("yyyyMMddHHmmssffffff"),
-                        };
-
-                        mDB.Update_oMissionBeginTime(oMission);
-                        mDB.Insert_ubActivation(ubActivation);
-                        mLog.TraceOut($"Update oMission OkFlag = R and Insert ubActivation!", Log.LogType.NONE);
+                            mLog.TraceOut($"[CrossFloor] 派發任務：{nextMission.BeginStation}→{nextMission.EndStation} TaskSource={nextMission.TaskSource}", Log.LogType.NONE);
+                            DispatchMission(nextMission);
+                        }
+                    }
+                    else
+                    {
+                        mLog.TraceOut($"[CrossFloor] 跨樓層車輛執行中，跨樓層任務排隊等待", Log.LogType.NONE);
                     }
                 }
 
-                List<oMissionModel> oMissionDetete = oAllMissions.Where(x => x.OkFlag == "C").ToList();
-                DeleteMission(oMissionDetete);
+                // ─── 一般任務（非跨樓層車輛管轄）────────────────────────────
+                var regularRunning = oMissionRun.Except(crossFloorRunning).ToList();
+                if (regularRunning.Count < 2)
+                {
+                    var regularMission = pendingMissions.Except(crossFloorPending).FirstOrDefault();
+                    if (regularMission != null)
+                    {
+                        mLog.TraceOut($"Get oMission Data! {regularMission?.ToString()}", Log.LogType.NONE);
+                        DispatchMission(regularMission);
+                    }
+                }
+                else
+                {
+                    mLog.TraceOut($"Two Regular Missions Is Running!", Log.LogType.NONE);
+                }
+
+                // ─── 清除已取消任務 ─────────────────────────────────────────
+                List<oMissionModel> oMissionDelete = oAllMissions.Where(x => x.OkFlag == "C").ToList();
+                DeleteMission(oMissionDelete);
 
                 mLog.TraceOut($"========================================== oMission End! ==========================================", Log.LogType.NONE);
             }
             catch (Exception ex)
             {
                 mLog.TraceOut($"AGV Scheduling Task Exception! [Exception] : {ex.Message}", Log.LogType.NONE);
+            }
+        }
+
+        /// <summary>
+        /// 將指定任務送至 RCS 並更新 oMission / ubActivation
+        /// </summary>
+        private void DispatchMission(oMissionModel oMission)
+        {
+            SchedulingTaskAck ack = GetSchedulingTask(hikAGV.AGVSettings.AGVTaskType, oMission);
+            mLog.TraceOut($"Get Scheduling Task Ack Data! {ack?.ToString()}", Log.LogType.NONE);
+            if (ack?.code == "0")
+            {
+                DateTime drNow = DateTime.Now;
+                oMission.OkFlag = "R";
+                oMission.TaskCode = ack?.data;
+                oMission.BeginTime = drNow.ToString("yyyyMMddHHmmssffffff");
+                ubActivationModel ubActivation = new ubActivationModel()
+                {
+                    TaskDateTime = oMission.TaskDateTime,
+                    ShuttleStation = oMission.BeginStation,
+                    TaskType = oMission.OkFlag,
+                    BeginStation = oMission.BeginStation,
+                    EndStation = oMission.EndStation,
+                    ReceivingTime = drNow.ToString("yyyyMMddHHmmssffffff"),
+                };
+                mDB.Update_oMissionBeginTime(oMission);
+                mDB.Insert_ubActivation(ubActivation);
+                mLog.TraceOut($"Update oMission OkFlag = R and Insert ubActivation!", Log.LogType.NONE);
             }
         }
 
@@ -494,9 +532,10 @@ namespace HikAGVWebAPI
                 List<string> fullPath;
                 string actualTaskType;
 
-                if (oMission.TaskSource == CrossFloorManager.IDLE_RETURN)
+                if (oMission.TaskSource == CrossFloorManager.IDLE_RETURN ||
+                    oMission.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
                 {
-                    // 歸位任務：BeginStation/EndStation 是電梯等待點，反查樓層後建構路徑
+                    // 歸位/預調度任務：BeginStation/EndStation 是電梯等待點，反查樓層後建構路徑
                     string fromFloor = pathCalculator.GetFloorByWaitPoint(oMission.BeginStation);
                     string toFloor = pathCalculator.GetFloorByWaitPoint(oMission.EndStation);
                     fullPath = pathCalculator.BuildReturnPath(fromFloor, toFloor)
@@ -506,7 +545,7 @@ namespace HikAGVWebAPI
                     var routeMatch = emptyMoveRoutes?.FirstOrDefault(r =>
                         r.FromFloor == fromFloor && r.ToFloor == toFloor);
                     actualTaskType = routeMatch?.TaskType ?? TaskType;
-                    mLog.TraceOut($"[IDLE_RETURN] TaskType: {actualTaskType}, Route: {fromFloor}>{toFloor}", Log.LogType.NONE);
+                    mLog.TraceOut($"[{oMission.TaskSource}] TaskType: {actualTaskType}, Route: {fromFloor}>{toFloor}", Log.LogType.NONE);
                 }
                 else
                 {

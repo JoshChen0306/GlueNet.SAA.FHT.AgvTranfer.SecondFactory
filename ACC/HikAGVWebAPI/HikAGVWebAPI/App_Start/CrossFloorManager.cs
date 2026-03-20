@@ -26,6 +26,7 @@ namespace HikAGVWebAPI.App_Start
         // ─── 歸位狀態 ─────────────────────────────────────────────
         private DateTime? _idleStartTime;           // 計時開始時間（null = 未計時）
         private bool _idleReturnDispatched;         // 歸位任務已寫入 oMission（待 Dispatch 派發）
+        private bool _crossFloorDispatchPending;    // 預調度任務已寫入 oMission（待 Dispatch 派發）
 
         // ─── 任務名稱常數 ─────────────────────────────────────────
         public const string IDLE_RETURN = "IDLE_RETURN";
@@ -91,6 +92,10 @@ namespace HikAGVWebAPI.App_Start
                     if (_idleReturnDispatched)
                         return;
 
+                    // 預調度任務已派發，等待 RCS 執行
+                    if (_crossFloorDispatchPending)
+                        return;
+
                     // 已在母樓層，不需歸位，重置計時
                     if (IsOnHomeFloor(shuttle))
                     {
@@ -152,11 +157,92 @@ namespace HikAGVWebAPI.App_Start
         }
 
         /// <summary>
+        /// 預調度任務完成時呼叫，重置預調度狀態
+        /// </summary>
+        public void OnCrossFloorDispatchCompleted()
+        {
+            _mLog.TraceOut($"[CrossFloor] 預調度任務完成，重置狀態", Log.LogType.NONE);
+            _crossFloorDispatchPending = false;
+        }
+
+        /// <summary>
         /// 判斷此車號是否為跨樓層車輛
         /// </summary>
         public bool IsCrossFloorShuttle(string shuttleId)
         {
             return _shuttleId == shuttleId;
+        }
+
+        /// <summary>
+        /// 判斷任務是否屬於跨樓層車輛管轄
+        /// 系統任務（IDLE_RETURN / CROSS_FLOOR_DISPATCH）直接歸屬；
+        /// 站內運輸（PLATE_RECOVERY）不歸屬；其餘依起終點是否跨樓層判斷
+        /// </summary>
+        public bool IsMissionForCrossFloorShuttle(oMissionModel mission)
+        {
+            if (mission == null) return false;
+            if (mission.TaskSource == IDLE_RETURN || mission.TaskSource == CROSS_FLOOR_DISPATCH)
+                return true;
+            if (mission.TaskSource == "PLATE_RECOVERY")
+                return false;
+            return _pathCalculator.IsCrossFloor(mission.BeginStation, mission.EndStation);
+        }
+
+        /// <summary>
+        /// 從待派發的跨樓層任務清單中選出下一筆應派發的任務
+        /// 若需要預調度，會建立 CROSS_FLOOR_DISPATCH 寫入 oMission 並回傳
+        /// 回傳 null 表示目前無法（或不需要）派發
+        /// </summary>
+        public oMissionModel SelectNextMission(List<oMissionModel> crossFloorPending)
+        {
+            try
+            {
+                // 系統任務（已寫入 oMission 尚未派發）直接回傳讓 Dispatch 送出
+                var systemTask = crossFloorPending.FirstOrDefault(
+                    m => m.TaskSource == CROSS_FLOOR_DISPATCH || m.TaskSource == IDLE_RETURN);
+                if (systemTask != null)
+                    return systemTask;
+
+                // 預調度已送出 RCS（不在 pending），等待 Callback
+                if (_crossFloorDispatchPending)
+                    return null;
+
+                // 一般跨樓層任務，依建立時間排序
+                var normalTasks = crossFloorPending
+                    .Where(m => m.TaskSource != IDLE_RETURN && m.TaskSource != CROSS_FLOOR_DISPATCH)
+                    .OrderBy(m => m.TaskDateTime)
+                    .ToList();
+
+                if (!normalTasks.Any())
+                    return null;
+
+                oShuttleModel shuttle = GetShuttleStatus();
+                if (shuttle == null) return null;
+
+                string currentFloor = GetFloorByMapCode(shuttle.MapCode);
+
+                // 起點與車輛同樓層的任務優先派發
+                var sameFloorTask = normalTasks.FirstOrDefault(m =>
+                    _pathCalculator.GetFloor(m.BeginStation) == currentFloor);
+
+                if (sameFloorTask != null)
+                {
+                    _mLog.TraceOut($"[CrossFloor] 同樓層任務優先派發：{sameFloorTask.BeginStation}→{sameFloorTask.EndStation}", Log.LogType.NONE);
+                    return sameFloorTask;
+                }
+
+                // 無同樓層任務 → 產生預調度任務，將車移至最早任務的起點樓層
+                string targetFloor = _pathCalculator.GetFloor(normalTasks.First().BeginStation);
+                if (string.IsNullOrEmpty(currentFloor) || string.IsNullOrEmpty(targetFloor))
+                    return null;
+
+                return DispatchCrossFloor(currentFloor, targetFloor);
+            }
+            catch (Exception ex)
+            {
+                _mLog.TraceOut($"[CrossFloor] SelectNextMission Exception: {ex.Message}", Log.LogType.NONE);
+                return null;
+            }
         }
 
         // ─── 私有方法 ─────────────────────────────────────────────
@@ -227,6 +313,43 @@ namespace HikAGVWebAPI.App_Start
         private void ResetIdleTimer()
         {
             _idleStartTime = null;
+        }
+
+        /// <summary>
+        /// 建立預調度任務寫入 oMission，將車移至 toFloor 電梯等待點
+        /// </summary>
+        private oMissionModel DispatchCrossFloor(string fromFloor, string toFloor)
+        {
+            try
+            {
+                var fullPath = _pathCalculator.BuildReturnPath(fromFloor, toFloor);
+                if (fullPath == null || fullPath.Count == 0)
+                {
+                    _mLog.TraceOut($"[CrossFloor] 無法建構預調度路徑 {fromFloor}→{toFloor}，預調度取消", Log.LogType.NONE);
+                    return null;
+                }
+
+                oMissionModel mission = new oMissionModel()
+                {
+                    TaskDateTime = DateTime.Now.ToString("yyyyMMddHHmmssffffff"),
+                    SerialNo = "0",
+                    BeginStation = fullPath.First(),
+                    EndStation = fullPath.Last(),
+                    TaskSource = CROSS_FLOOR_DISPATCH,
+                    RackId = "-1",
+                    WorkOrder = "",
+                };
+
+                _mDB.Insert_oMission(mission);
+                _crossFloorDispatchPending = true;
+                _mLog.TraceOut($"[CrossFloor] 預調度任務已寫入 oMission，{fromFloor}→{toFloor}（{mission.BeginStation}→{mission.EndStation}）", Log.LogType.NONE);
+                return mission;
+            }
+            catch (Exception ex)
+            {
+                _mLog.TraceOut($"[CrossFloor] DispatchCrossFloor Exception: {ex.Message}", Log.LogType.NONE);
+                return null;
+            }
         }
     }
 }

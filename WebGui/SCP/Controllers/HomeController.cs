@@ -216,21 +216,41 @@ namespace SCP.Controllers
                 {"C",("text-warning","充電") },
                 {"A",("text-danger","異常") },
                 {"F",("text-secondary","離線") },
-
             };
 
+            // 系統任務類型的顯示覆寫（優先於一般運行狀態）
+            Dictionary<string, (string Color, string Description)> TaskSourceDisplay = new Dictionary<string, (string Color, string Description)>
+            {
+                {"IDLE_RETURN",        ("text-warning", "歸位中") },
+                {"CROSS_FLOOR_DISPATCH",("text-primary", "預調度") },
+            };
+
+            // 取得目前執行中任務的 TaskSource（依車號索引）
+            var runningTaskSources = _DBContext.oMission
+                .Where(m => m.OkFlag == "R" && m.ShuttleId != null)
+                .Select(m => new { m.ShuttleId, m.TaskSource })
+                .ToList()
+                .GroupBy(m => m.ShuttleId!.Value)
+                .ToDictionary(g => g.Key, g => g.First().TaskSource ?? "");
+
             ViewBag.TaskStatus = _DBContext.oShuttle
-                .Select(s => new
+                .ToList()
+                .Select(s =>
                 {
-                    s.ShuttleId,
-                    s.GustomerName,
-                    s.Battery,
-                    BatteryColor = s.Battery < 50 && s.Battery > 30 ? "yellow" : s.Battery <= 30 ? "red" : "",
-                    Status[s.Status].Color,
-                    Status[s.Status].Description,
-                    s.LastStation,
-                    s.BeginStation,
-                    s.EndStation
+                    var taskSource = runningTaskSources.ContainsKey(s.ShuttleId) ? runningTaskSources[s.ShuttleId] : "";
+                    bool hasOverride = TaskSourceDisplay.ContainsKey(taskSource);
+                    return new
+                    {
+                        s.ShuttleId,
+                        s.GustomerName,
+                        s.Battery,
+                        BatteryColor = s.Battery < 50 && s.Battery > 30 ? "yellow" : s.Battery <= 30 ? "red" : "",
+                        Color       = hasOverride ? TaskSourceDisplay[taskSource].Color       : Status[s.Status].Color,
+                        Description = hasOverride ? TaskSourceDisplay[taskSource].Description : Status[s.Status].Description,
+                        s.LastStation,
+                        s.BeginStation,
+                        s.EndStation
+                    };
                 });
         }
 

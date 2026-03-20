@@ -80,6 +80,11 @@ namespace HikAGVWebAPI
                                 mLog.TraceOut($"[CrossFloor] 歸位任務 Callback end，通知 CrossFloorManager 完成", Log.LogType.NONE);
                                 Dispatch.CrossFloor?.OnIdleReturnCompleted();
                             }
+                            else if (oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
+                            {
+                                mLog.TraceOut($"[CrossFloor] 預調度任務 Callback end，通知 CrossFloorManager 完成", Log.LogType.NONE);
+                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted();
+                            }
                             mLog.TraceOut($"AGV End Finish!", Log.LogType.NONE);
                             break;
                         case CallBackMethod.cancel:

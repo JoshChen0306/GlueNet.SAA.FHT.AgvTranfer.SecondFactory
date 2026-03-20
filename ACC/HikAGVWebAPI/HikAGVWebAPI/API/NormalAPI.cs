@@ -13,6 +13,20 @@ namespace HikAGVWebAPI
         //public const string Route = "rcms/services/rest/hikRpcService/";
         //public const string AGVStatusRoute = "rcms-dps/rest/";
 
+        // ★ 模擬用：跨樓層車輛 AGV3 目前所在 MapCode（任務完成後自動更新）
+        private static string _mockAgv3MapCode = "DD"; // 初始：3F
+
+        // ★ 模擬用：電梯等待點 → MapCode 對照（對應 FHtSetting.config 的電梯設定）
+        private static readonly Dictionary<string, string> _elevatorWaitPointToMapCode
+            = new Dictionary<string, string>
+            {
+                { "U1", "AA" }, // 客梯 1F
+                { "V1", "BB" }, // 客梯 2F
+                { "W1", "DD" }, // 客梯 3F
+                { "X1", "DD" }, // 貨梯 3F
+                { "Y1", "FF" }, // 貨梯 4F
+            };
+
         /// <summary>
         /// 生成任務單
         /// </summary>
@@ -51,7 +65,7 @@ namespace HikAGVWebAPI
                 // 注意：需確保您的 SchedulingTask 模型結構能正確解析 positionCodePath
                 string startStation = taskInfo.positionCodePath.FirstOrDefault()?.positionCode;
                 string endStation = taskInfo.positionCodePath.LastOrDefault()?.positionCode;
-                string robotCode = "AGV_001"; // 模擬車號
+                string robotCode = "3"; // 模擬跨樓層車號（對應 HikAGV.config CrossFloorShuttleId）
 
                 using (var httpClient = new HttpClient())
                 {
@@ -80,6 +94,13 @@ namespace HikAGVWebAPI
                         currentPositionCode = endStation // 終點
                     };
                     await PostCallback(httpClient, callbackUrl, endPayload);
+
+                    // ★ end callback 後，更新 AGV3 的模擬 MapCode（讓下次 AGVStatus 輪詢回傳正確位置）
+                    if (endStation != null &&
+                        _elevatorWaitPointToMapCode.TryGetValue(endStation, out string destMapCode))
+                    {
+                        _mockAgv3MapCode = destMapCode;
+                    }
                 }
             }
             catch (Exception ex)
@@ -408,7 +429,7 @@ namespace HikAGVWebAPI
                                 battery = "25",
                                 posX = "1.0",
                                 posY = "2.0",
-                                mapCode = "DD",
+                                mapCode = _mockAgv3MapCode, // ★ 動態：反映任務完成後的位置
                                 speed = "",
                                 status = "4",
                                 exclType = "0",
