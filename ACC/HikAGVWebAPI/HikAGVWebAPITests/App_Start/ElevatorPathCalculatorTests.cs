@@ -664,5 +664,81 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         #endregion
+
+        #region GetElevatorExitStation 歸位出口站點測試
+
+        [TestMethod]
+        public void GetElevatorExitStation_目標4F_應該返回客貨梯4F等待點()
+        {
+            // 4F 由客貨梯服務，返回 Y1（4F 客貨梯等待點）
+            var result = _calculator.GetElevatorExitStation("H1", "4F");
+            Assert.AreEqual("Y1", result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_目標3F_應該返回客貨梯或客梯3F等待點()
+        {
+            // 3F 同時在客梯與客貨梯範圍，優先回傳客貨梯等待點 X1
+            var result = _calculator.GetElevatorExitStation("K1", "3F");
+            Assert.AreEqual("X1", result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_目標2F_應該返回客梯2F等待點()
+        {
+            // 2F 由客梯服務，返回 V1（2F 客梯等待點）
+            var result = _calculator.GetElevatorExitStation("K1", "2F");
+            Assert.AreEqual("V1", result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_目標1F_應該返回客梯1F等待點()
+        {
+            // 1F 由客梯服務，返回 U1（1F 客梯等待點）
+            var result = _calculator.GetElevatorExitStation("K1", "1F");
+            Assert.AreEqual("U1", result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_Null目標樓層_應該返回Null()
+        {
+            var result = _calculator.GetElevatorExitStation("H1", null);
+            Assert.IsNull(result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_空字串目標樓層_應該返回Null()
+        {
+            var result = _calculator.GetElevatorExitStation("H1", "");
+            Assert.IsNull(result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_不存在樓層_應該返回Null()
+        {
+            var result = _calculator.GetElevatorExitStation("H1", "5F");
+            Assert.IsNull(result);
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_4F目標站應為客貨梯等待點()
+        {
+            // 4F 出口站應為客貨梯等待點（AgvSettings 預設 FreightElevatorWaitPoints 包含 4F:Y1）
+            string exitStation = _calculator.GetElevatorExitStation("H1", "4F");
+            Assert.IsNotNull(exitStation);
+            // 電梯等待點為電梯配置中的有效站點，能作為 RCS positionCodePath 的終點
+            Assert.IsFalse(string.IsNullOrEmpty(exitStation), "歸位目標站不得為空");
+        }
+
+        [TestMethod]
+        public void GetElevatorExitStation_不同起點_相同目標樓層_應返回相同出口站()
+        {
+            // 不論從哪個站點歸位至 4F，都應返回同一個電梯等待點
+            string fromH = _calculator.GetElevatorExitStation("H1", "4F");
+            string fromI = _calculator.GetElevatorExitStation("I1", "4F");
+            Assert.AreEqual(fromH, fromI, "相同樓層目標應有一致的歸位站點");
+        }
+
+        #endregion
     }
 }

@@ -25,6 +25,14 @@ namespace HikAGVWebAPI.App_Start
             mSql.WriteSqlByAutoOpen(sSQL);
         }
 
+        public void Insert_oMission(oMissionModel oMission)
+        {
+            string sSQL = $@"insert into oMission
+                                    (TaskDateTime, SerialNo, BeginStation, EndStation, TaskSource, RackId, WorkOrder)
+                             values ('{oMission.TaskDateTime}', 0, '{oMission.BeginStation}', '{oMission.EndStation}', '{oMission.TaskSource}', '{oMission.RackId}', '') ";
+            mSql.WriteSqlByAutoOpen(sSQL);
+        }
+
         public void Insert_ubActivation(ubActivationModel ActivationModel)
         {
             string sSQL = $@"insert into ubActivation
@@ -90,6 +98,7 @@ namespace HikAGVWebAPI.App_Start
                                    ,PosY = '{agvStatus?.posY.PadRight(6, '0')}'
                                    ,RobotDir = '{agvStatus?.robotDir}'
                                    ,MapCode = '{agvStatus?.mapCode}'
+                                   ,UpdateTime = GETDATE()
                               where ShuttleId = {agvStatus?.robotCode} ";
             mSql.WriteSqlByAutoOpen(sSQL);
         }

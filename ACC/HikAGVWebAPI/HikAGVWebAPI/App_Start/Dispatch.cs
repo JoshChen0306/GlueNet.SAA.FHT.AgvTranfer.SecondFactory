@@ -31,6 +31,8 @@ namespace HikAGVWebAPI
         private Dictionary<string, DateTime?> dtAbnormalStartTime = new Dictionary<string, DateTime?>();//任務異常動率
         private static readonly HttpClient client = new HttpClient();//上拋客戶端
         private Dictionary<string, Dictionary<string, object>> dicLowBattery = new Dictionary<string, Dictionary<string, object>>();//
+        private CrossFloorManager _crossFloorManager;
+        public static CrossFloorManager CrossFloor { get; private set; }
 
         public Dispatch()
         {
@@ -60,6 +62,15 @@ namespace HikAGVWebAPI
                 dtAbnormalStartTime = oShuttles.Select(x => new KeyValuePair<string, DateTime?>(x.ShuttleId, null)).ToDictionary(x => x.Key, x => x.Value);
                 dicLowBattery = oShuttles.Select(x => new KeyValuePair<string, Dictionary<string, object>>(x.ShuttleId, new Dictionary<string, object>())).ToDictionary(x => x.Key, x => x.Value);
                 #endregion 依照 DB oShuttle 表內的車號增加充電稼動率變數
+
+                // 初始化跨樓層管理器
+                _crossFloorManager = new CrossFloorManager(
+                    hikAGV.AGVSettings.CrossFloorShuttleId,
+                    hikAGV.AGVSettings.IdleReturnTimeout,
+                    hikAGV.AGVSettings.IdleReturnFloor,
+                    hikAGV.AGVSettings.MapCodeFloorMapping,
+                    mDB, mLog, hikAGV, ElevatorSettings);
+                CrossFloor = _crossFloorManager;
             }
             catch (Exception ex)
             {
@@ -117,7 +128,8 @@ namespace HikAGVWebAPI
             {
                 try
                 {
-                    //UpdateAGVStatus();
+                    UpdateAGVStatus();
+                    _crossFloorManager?.Tick();
                     AGVSchedulingTask();
                 }
                 catch (Exception ex)
@@ -213,7 +225,7 @@ namespace HikAGVWebAPI
                             mLog.TraceOut($"Update AGV Data! {agvData?.ToString()}", Log.LogType.NONE);
 
                             //電量低於 40 跟 25 上報 FHt
-                            CheckBattery(agvData);
+                            //CheckBattery(agvData);
                         }
                     }
 
@@ -323,6 +335,7 @@ namespace HikAGVWebAPI
                 oMissionModel oMission = oAllMissions.Where(x => string.IsNullOrEmpty(x.OkFlag)).FirstOrDefault();
                 if (oMission != null)
                 {
+                    _crossFloorManager?.OnNewTaskArrived();
                     mLog.TraceOut($"Get All Missions Data! {oAllMissions?.ToString()}", Log.LogType.NONE);
                     mLog.TraceOut($"Get oMission Data! {oMission?.ToString()}", Log.LogType.NONE);
                     SchedulingTaskAck ack = GetSchedulingTask(hikAGV.AGVSettings.AGVTaskType, oMission);
@@ -471,18 +484,37 @@ namespace HikAGVWebAPI
             {
                 var rackId = string.IsNullOrEmpty(oMission.RackId) ? "-1" : oMission.RackId;
 
-                // 計算電梯路徑
                 var pathCalculator = new ElevatorPathCalculator(ElevatorSettings);
-                var fullPath = pathCalculator.CalculatePath(oMission.BeginStation, oMission.EndStation);
-                
-                // 根據路線查詢對應的 TaskType（從 DB 讀取路由清單）
-                var transportRoutes = mDB.Select_oTaskTypeRoute("Transport");
-                string actualTaskType = pathCalculator.GetTaskType(
-                    oMission.BeginStation,
-                    oMission.EndStation,
-                    transportRoutes,
-                    TaskType);  // 預設 TaskType（全域 fallback）
-                mLog.TraceOut($"TaskType: {actualTaskType}, Route: {pathCalculator.GetFloor(oMission.BeginStation)}>{pathCalculator.GetFloor(oMission.EndStation)}", Log.LogType.NONE);
+                List<string> fullPath;
+                string actualTaskType;
+
+                if (oMission.TaskSource == CrossFloorManager.IDLE_RETURN)
+                {
+                    // 歸位任務：BeginStation/EndStation 是電梯等待點，反查樓層後建構路徑
+                    string fromFloor = pathCalculator.GetFloorByWaitPoint(oMission.BeginStation);
+                    string toFloor = pathCalculator.GetFloorByWaitPoint(oMission.EndStation);
+                    fullPath = pathCalculator.BuildReturnPath(fromFloor, toFloor)
+                               ?? new List<string> { oMission.BeginStation, oMission.EndStation };
+
+                    var emptyMoveRoutes = mDB.Select_oTaskTypeRoute("EmptyMove");
+                    var routeMatch = emptyMoveRoutes?.FirstOrDefault(r =>
+                        r.FromFloor == fromFloor && r.ToFloor == toFloor);
+                    actualTaskType = routeMatch?.TaskType ?? TaskType;
+                    mLog.TraceOut($"[IDLE_RETURN] TaskType: {actualTaskType}, Route: {fromFloor}>{toFloor}", Log.LogType.NONE);
+                }
+                else
+                {
+                    // 一般任務：計算電梯路徑
+                    fullPath = pathCalculator.CalculatePath(oMission.BeginStation, oMission.EndStation);
+
+                    var transportRoutes = mDB.Select_oTaskTypeRoute("Transport");
+                    actualTaskType = pathCalculator.GetTaskType(
+                        oMission.BeginStation,
+                        oMission.EndStation,
+                        transportRoutes,
+                        TaskType);
+                    mLog.TraceOut($"TaskType: {actualTaskType}, Route: {pathCalculator.GetFloor(oMission.BeginStation)}>{pathCalculator.GetFloor(oMission.EndStation)}", Log.LogType.NONE);
+                }
                 
                 string PositionCode = string.Join(";", fullPath.Select(p => $"{p},00"));
                 mLog.TraceOut($"Calculated Path: {PositionCode}", Log.LogType.NONE);

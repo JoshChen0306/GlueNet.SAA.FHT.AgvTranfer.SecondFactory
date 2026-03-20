@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Web.Http;
+using HikAGVWebAPI.App_Start;
 
 namespace HikAGVWebAPI
 {
@@ -74,6 +75,11 @@ namespace HikAGVWebAPI
                             break;
                         case CallBackMethod.end:
                             UpdateEnd(oMission, ubActivation, sCurrentPositionCode);
+                            if (oMission?.TaskSource == CrossFloorManager.IDLE_RETURN)
+                            {
+                                mLog.TraceOut($"[CrossFloor] 歸位任務 Callback end，通知 CrossFloorManager 完成", Log.LogType.NONE);
+                                Dispatch.CrossFloor?.OnIdleReturnCompleted();
+                            }
                             mLog.TraceOut($"AGV End Finish!", Log.LogType.NONE);
                             break;
                         case CallBackMethod.cancel:

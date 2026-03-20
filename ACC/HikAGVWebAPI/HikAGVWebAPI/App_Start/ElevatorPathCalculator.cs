@@ -72,6 +72,21 @@ namespace HikAGVWebAPI
         }
 
         /// <summary>
+        /// 反查電梯等待點所屬樓層（用於 IDLE_RETURN 任務的 BeginStation/EndStation 還原）
+        /// </summary>
+        public string GetFloorByWaitPoint(string waitPoint)
+        {
+            if (string.IsNullOrEmpty(waitPoint))
+                return null;
+
+            var freight = _freightWaitPoints.FirstOrDefault(kv => kv.Value == waitPoint);
+            if (freight.Key != null) return freight.Key;
+
+            var customer = _customerWaitPoints.FirstOrDefault(kv => kv.Value == waitPoint);
+            return customer.Key;
+        }
+
+        /// <summary>
         /// 取得站點所屬樓層（根據首字母）
         /// </summary>
         public string GetFloor(string station)
@@ -218,6 +233,79 @@ namespace HikAGVWebAPI
             int f1 = int.Parse(floor1.Replace("F", ""));
             int f2 = int.Parse(floor2.Replace("F", ""));
             return f1.CompareTo(f2);
+        }
+
+        /// <summary>
+        /// 建構歸位路徑：從指定樓層的電梯等待點出發，到達目標樓層的電梯等待點
+        /// 不依賴 LastStation，直接根據樓層名稱計算完整電梯路徑
+        /// </summary>
+        /// <param name="fromFloor">目前所在樓層（由 MapCode 推算）</param>
+        /// <param name="toFloor">目標歸位樓層</param>
+        /// <returns>完整路徑站點列表，或 null（無法計算）</returns>
+        public List<string> BuildReturnPath(string fromFloor, string toFloor)
+        {
+            if (string.IsNullOrEmpty(fromFloor) || string.IsNullOrEmpty(toFloor))
+                return null;
+
+            if (fromFloor == toFloor)
+                return null;
+
+            var path = new List<string>();
+            bool isGoingUp = CompareFloor(fromFloor, toFloor) < 0;
+            bool needCustomer = NeedCustomerElevator(fromFloor, toFloor);
+            bool needFreight = NeedFreightElevator(fromFloor, toFloor);
+
+            if (needCustomer && needFreight)
+            {
+                if (isGoingUp)
+                {
+                    // 上行：客梯(起→3F) → 客貨梯(3F→終)
+                    AddElevatorPath(path, fromFloor, "3F", true, isCustomer: true);
+                    AddElevatorPath(path, "3F", toFloor, true, isCustomer: false);
+                }
+                else
+                {
+                    // 下行：客貨梯(起→3F) → 客梯(3F→終)
+                    AddElevatorPath(path, fromFloor, "3F", false, isCustomer: false);
+                    AddElevatorPath(path, "3F", toFloor, false, isCustomer: true);
+                }
+            }
+            else if (needFreight)
+            {
+                AddElevatorPath(path, fromFloor, toFloor, isGoingUp, isCustomer: false);
+            }
+            else if (needCustomer)
+            {
+                AddElevatorPath(path, fromFloor, toFloor, isGoingUp, isCustomer: true);
+            }
+
+            // 加上目標樓層等待點作為路徑終點
+            if (_freightWaitPoints.ContainsKey(toFloor))
+                path.Add(_freightWaitPoints[toFloor]);
+            else if (_customerWaitPoints.ContainsKey(toFloor))
+                path.Add(_customerWaitPoints[toFloor]);
+
+            return path.Count > 0 ? path : null;
+        }
+
+        /// <summary>
+        /// 取得目標樓層的電梯出口等待站點（用於自動歸位目標站設定）
+        /// 優先回傳客貨梯等待點（服務高樓層），其次回傳客梯等待點
+        /// </summary>
+        public string GetElevatorExitStation(string currentStation, string targetFloor)
+        {
+            if (string.IsNullOrEmpty(targetFloor))
+                return null;
+
+            // 優先使用客貨梯等待點（3F-4F）
+            if (_freightFloors.Contains(targetFloor) && _freightWaitPoints.ContainsKey(targetFloor))
+                return _freightWaitPoints[targetFloor];
+
+            // 其次使用客梯等待點（1F-3F）
+            if (_customerFloors.Contains(targetFloor) && _customerWaitPoints.ContainsKey(targetFloor))
+                return _customerWaitPoints[targetFloor];
+
+            return null;
         }
 
         /// <summary>
