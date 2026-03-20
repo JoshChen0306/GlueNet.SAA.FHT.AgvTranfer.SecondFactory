@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -87,16 +87,15 @@ namespace HikAGVWebAPI
         }
 
         /// <summary>
-        /// 根據起終樓層取得對應的 TaskType
+        /// 根據起終樓層與路由清單取得對應的 TaskType
         /// </summary>
         /// <param name="beginStation">起點站點</param>
         /// <param name="endStation">終點站點</param>
-        /// <param name="sameFloorTaskTypeMap">各樓層站內 TaskType 對照表（格式: "1F:F002,2F:F001"）</param>
-        /// <param name="crossFloorTaskTypeMap">跨樓層 TaskType 對照表（格式: "1F>3F:F13Test,..."）</param>
+        /// <param name="routes">路由清單（從 DB 查詢，已篩選 UseFlag='Y'）</param>
         /// <param name="defaultTaskType">全域預設 TaskType（找不到對應設定時使用）</param>
         /// <returns>對應的 TaskType</returns>
         public string GetTaskType(string beginStation, string endStation,
-                                  string sameFloorTaskTypeMap, string crossFloorTaskTypeMap, string defaultTaskType)
+                                  List<oTaskTypeRouteModel> routes, string defaultTaskType)
         {
             var beginFloor = GetFloor(beginStation);
             var endFloor = GetFloor(endStation);
@@ -105,44 +104,18 @@ namespace HikAGVWebAPI
             if (beginFloor == null || endFloor == null)
                 return defaultTaskType;
 
-            // 同樓層：查詢 SameFloorTaskTypeMap
-            if (beginFloor == endFloor)
-            {
-                if (!string.IsNullOrEmpty(sameFloorTaskTypeMap))
-                {
-                    var sameFloorMap = ParseTaskTypeMap(sameFloorTaskTypeMap);
-                    if (sameFloorMap.TryGetValue(beginFloor, out string sameFloorTaskType))
-                        return sameFloorTaskType;
-                }
+            if (routes == null || routes.Count == 0)
                 return defaultTaskType;
-            }
 
-            // 跨樓層：查詢 CrossFloorTaskTypeMap
-            var map = ParseTaskTypeMap(crossFloorTaskTypeMap);
-            var routeKey = $"{beginFloor}>{endFloor}";
+            // 查詢符合起終樓層的路由
+            var match = routes.FirstOrDefault(r =>
+                r.FromFloor == beginFloor && r.ToFloor == endFloor);
 
-            if (map.TryGetValue(routeKey, out string taskType))
-                return taskType;
+            if (match != null)
+                return match.TaskType;
 
             // 找不到對應路線，返回預設值
             return defaultTaskType;
-        }
-
-        /// <summary>
-        /// 解析 TaskType 對照表字串
-        /// </summary>
-        private Dictionary<string, string> ParseTaskTypeMap(string mapString)
-        {
-            var result = new Dictionary<string, string>();
-            if (string.IsNullOrEmpty(mapString)) return result;
-            
-            foreach (var pair in mapString.Split(','))
-            {
-                var parts = pair.Trim().Split(':');
-                if (parts.Length == 2)
-                    result[parts[0].Trim()] = parts[1].Trim();
-            }
-            return result;
         }
 
         /// <summary>

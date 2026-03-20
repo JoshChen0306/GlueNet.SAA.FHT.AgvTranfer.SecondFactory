@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>預調度機制 — 流程圖</title>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 20px; background: #f8f9fa; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #9b59b6; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #bdc3c7; padding: 10px 14px; text-align: left; }
+        th { background: #9b59b6; color: #fff; }
+        tr:nth-child(even) { background: #ecf0f1; }
+        .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 15px 0; }
+        .mermaid { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <h1>預調度機制 — 流程圖</h1>
+    <p>建立日期：2026-03-20</p>
+
+    <h2>情境對照表</h2>
+    <table>
+        <tr>
+            <th>#</th><th>車輛狀態</th><th>佇列內容</th><th>車輛 vs 任務起點</th><th>處理方式</th>
+        </tr>
+        <tr><td>1</td><td>任務執行中</td><td>—</td><td>—</td><td>不處理，等任務完成（含預調度任務）</td></tr>
+        <tr><td>2</td><td>IDLE</td><td>空</td><td>—</td><td>佇列無任務，交由歸位機制判斷</td></tr>
+        <tr><td>3</td><td>IDLE</td><td>有同樓層任務</td><td>同樓層</td><td>直接派發最早的同樓層任務</td></tr>
+        <tr><td>4</td><td>IDLE</td><td>混合（同樓層+跨樓層）</td><td>—</td><td>優先派發同樓層任務</td></tr>
+        <tr><td>5</td><td>IDLE</td><td>只有跨樓層任務</td><td>不同樓層</td><td>產生 CROSS_FLOOR_DISPATCH 預調度任務</td></tr>
+        <tr><td>6</td><td>預調度完成</td><td>有任務</td><td>同樓層（已到起點）</td><td>派發原始任務</td></tr>
+        <tr><td>7</td><td>預調度執行中</td><td>新任務進入</td><td>—</td><td>等預調度完成，Callback 後重新評估佇列</td></tr>
+    </table>
+
+    <h2>流程圖</h2>
+    <div class="note">
+        <strong>觸發時機：</strong>車輛變為 IDLE 時（任務完成 Callback、預調度完成 Callback、歸位完成 Callback）
+    </div>
+    <div class="mermaid">
+flowchart TD
+    Start(["`**車輛 IDLE
+    或任務完成 Callback**`"]) --> CheckBusy{"`車輛是否
+    在執行任務?`"}
+
+    CheckBusy -->|"Yes （情境 #1）"| Ignore["`不處理
+    等任務完成
+    （含預調度/歸位）`"]
+
+    CheckBusy -->|No| CheckQueue{"`佇列是否
+    有任務?`"}
+
+    CheckQueue -->|"No （情境 #2）"| ToIdle["`佇列無任務
+    交由歸位機制判斷`"]
+
+    CheckQueue -->|Yes| CheckSameFloor{"`佇列中是否有
+    與車輛同樓層的任務?`"}
+
+    CheckSameFloor -->|"Yes （情境 #3 #4）"| DispatchSame["`派發最早的
+    同樓層任務
+    （同優先序依建立時間 FIFO）`"]
+
+    CheckSameFloor -->|No| CheckAtStart{"`車輛是否已在
+    最早任務的起點樓層?`"}
+
+    CheckAtStart -->|"Yes （情境 #6）"| DispatchDirect["`直接派發該任務
+    （預調度已完成）`"]
+
+    CheckAtStart -->|"No （情境 #5）"| PreDispatch["`產生 CROSS_FLOOR_DISPATCH
+    透過 ElevatorPathCalculator
+    計算路徑與 TaskType
+    派發預調度至 RCS`"]
+
+    PreDispatch --> WaitPre["`等待預調度完成`"]
+
+    WaitPre -->|"Callback （情境 #6 #7）"| ReEval["`重新評估佇列`"]
+    ReEval --> CheckQueue
+
+    DispatchSame --> WaitTask["`等待任務完成`"]
+    WaitTask -->|Callback| ReEval2["`重新評估佇列`"]
+    ReEval2 --> CheckQueue
+
+    DispatchDirect --> WaitTask2["`等待任務完成`"]
+    WaitTask2 -->|Callback| ReEval3["`重新評估佇列`"]
+    ReEval3 --> CheckQueue
+
+    style Start fill:#9b59b6,color:#fff
+    style Ignore fill:#95a5a6,color:#fff
+    style ToIdle fill:#3498db,color:#fff
+    style DispatchSame fill:#2ecc71,color:#fff
+    style DispatchDirect fill:#2ecc71,color:#fff
+    style PreDispatch fill:#e67e22,color:#fff
+    style WaitPre fill:#f39c12,color:#fff
+    style WaitTask fill:#f39c12,color:#fff
+    style WaitTask2 fill:#f39c12,color:#fff
+    style ReEval fill:#3498db,color:#fff
+    style ReEval2 fill:#3498db,color:#fff
+    style ReEval3 fill:#3498db,color:#fff
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' } });</script>
+</body>
+</html>

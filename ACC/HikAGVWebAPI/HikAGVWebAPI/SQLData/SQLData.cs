@@ -70,6 +70,14 @@ namespace HikAGVWebAPI.App_Start
             string sJson = JsonConvert.SerializeObject(dt);
             return JsonConvert.DeserializeObject<List<oShuttleModel>>(sJson);
         }
+
+        public List<oTaskTypeRouteModel> Select_oTaskTypeRoute(string moveType)
+        {
+            string sSQL = $@"select * from oTaskTypeRoute where UseFlag = 'Y' and MoveType = '{moveType}' ";
+            DataTable dt = mSql.QuerySqlByAutoOpen(sSQL).Tables[0];
+            string sJson = JsonConvert.SerializeObject(dt);
+            return JsonConvert.DeserializeObject<List<oTaskTypeRouteModel>>(sJson);
+        }
         #endregion 搜尋類
 
         #region 更新類

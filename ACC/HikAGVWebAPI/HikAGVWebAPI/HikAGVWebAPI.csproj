@@ -137,6 +137,8 @@
     <Compile Include="Models\SyncMapDatasModel.cs" />
     <Compile Include="Models\ubActivationModel.cs" />
     <Compile Include="Models\ubMissionModel.cs" />
+    <Compile Include="Models\oPortBindingModel.cs" />
+    <Compile Include="Models\oTaskTypeRouteModel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="API\CallBackAPI.cs" />
     <Compile Include="API\NormalAPI.cs" />

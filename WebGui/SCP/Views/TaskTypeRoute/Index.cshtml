@@ -1,0 +1,213 @@
+@{
+}
+@model IEnumerable<oTaskTypeRoute>
+<div class="col-lg-12 main-chart">
+    <div class="col-10">
+        <div class="d-flex">
+            <h4 class="mt-3 mb-3"><strong>TaskType 路由設定</strong></h4>
+            <div class="ms-auto">
+                <button class="mt-3 btn btn-outline-primary" id="maintain-btn"><i class="fa-solid fa-pen-to-square me-1"></i>維護</button>
+                <button class="mt-3 btn btn-success d-none" id="maintain-save"><i class="fa-solid fa-floppy-disk me-1"></i>儲存</button>
+                <button class="mt-3 btn btn-outline-secondary d-none" id="maintain-cancel"><i class="fa-solid fa-xmark me-1"></i>取消</button>
+            </div>
+        </div>
+        <div class="maintain-table">
+            <table class="table mt-4" id="maintain-table">
+                <thead class="text-center">
+                    <tr>
+                        <th class="text-secondary">#</th>
+                        <th class="text-secondary">移動類型</th>
+                        <th class="text-secondary">起點樓層</th>
+                        <th class="text-secondary">終點樓層</th>
+                        <th class="text-secondary">TaskType</th>
+                        <th class="text-secondary">啟用</th>
+                        <th class="text-secondary">備註</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{int i = 1;}
+                    @foreach (var item in Model)
+                    {
+                        <tr class="text-center" data-id="@item.Id">
+                            <td class="align-middle">@i</td>
+                            <td class="align-middle">@item.MoveType</td>
+                            <td class="align-middle">@item.FromFloor</td>
+                            <td class="align-middle">@item.ToFloor</td>
+                            <td class="align-middle">@item.TaskType</td>
+                            <td class="align-middle">
+                                @if (item.UseFlag == "Y")
+                                {
+                                    <span class="badge bg-success">啟用</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">停用</span>
+                                }
+                            </td>
+                            <td class="align-middle">@item.Remark</td>
+                            <td class="align-middle text-nowrap">
+                                <button data-bs-toggle="collapse" data-bs-target="#edit-@item.Id" aria-expanded="false" aria-controls="@item.Id" class="btn edit-btn p-0">
+                                    <i class="fa-solid fa-square-pen fa-xl" style="color: #40B1FF;"></i>
+                                </button>
+                                <button class="btn delete-btn p-0" id="delete-@item.Id"><i class="fa-solid fa-square-minus fa-xl" style="color: #E25E3E;"></i></button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="8" class="border-0 p-0">
+                                <div id="edit-@item.Id" class="collapse ps-3">
+                                    <form>
+                                        <input type="hidden" name="Id" value="@item.Id" />
+                                        <div class="row row-cols-3 gy-3 m-0">
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">移動類型</label>
+                                                <select class="form-select p-0 w-50" name="MoveType">
+                                                    @if (item.MoveType == "Transport")
+                                                    {
+                                                        <option value="Transport" selected>Transport</option>
+                                                        <option value="EmptyMove">EmptyMove</option>
+                                                    }
+                                                    else
+                                                    {
+                                                        <option value="Transport">Transport</option>
+                                                        <option value="EmptyMove" selected>EmptyMove</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">起點樓層</label>
+                                                <select class="form-select p-0 w-50" name="FromFloor">
+                                                    @foreach (var floor in new[] { "1F", "2F", "3F", "4F" })
+                                                    {
+                                                        if (floor == item.FromFloor)
+                                                        {
+                                                            <option value="@floor" selected>@floor</option>
+                                                        }
+                                                        else
+                                                        {
+                                                            <option value="@floor">@floor</option>
+                                                        }
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">終點樓層</label>
+                                                <select class="form-select p-0 w-50" name="ToFloor">
+                                                    @foreach (var floor in new[] { "1F", "2F", "3F", "4F" })
+                                                    {
+                                                        if (floor == item.ToFloor)
+                                                        {
+                                                            <option value="@floor" selected>@floor</option>
+                                                        }
+                                                        else
+                                                        {
+                                                            <option value="@floor">@floor</option>
+                                                        }
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">TaskType</label>
+                                                <input class="form-control p-0 w-50" name="TaskType" autocomplete="off" value="@item.TaskType" />
+                                            </div>
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">啟用狀態</label>
+                                                <select class="form-select p-0 w-25" name="UseFlag">
+                                                    @if (item.UseFlag == "Y")
+                                                    {
+                                                        <option value="Y" selected>啟用</option>
+                                                        <option value="N">停用</option>
+                                                    }
+                                                    else
+                                                    {
+                                                        <option value="Y">啟用</option>
+                                                        <option value="N" selected>停用</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col d-flex align-items-center">
+                                                <label class="me-3">備註</label>
+                                                <input class="form-control p-0 w-50" name="Remark" autocomplete="off" value="@item.Remark" />
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        i++;
+                    }
+                </tbody>
+                <tfoot>
+                    <tr data-bs-toggle="collapse" data-bs-target="#insertcollapse" id="InsertData">
+                        <td colspan="8" id="insert-btn" class="bg-secondary border-0 bg-opacity-10 text-center d-none" style="cursor: pointer;">
+                            <i class="fa-solid fa-square-plus fa-xl" style="color: #9A9A9A;"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="8" class="border-0 p-0">
+                            <div id="insertcollapse" class="collapse ps-3">
+                                <form id="InsertForm">
+                                    <div class="row row-cols-3 gy-3 m-0">
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">移動類型</label>
+                                            <select class="form-select p-0 w-50" name="MoveType" required>
+                                                <option value="">請選擇</option>
+                                                <option value="Transport">Transport</option>
+                                                <option value="EmptyMove">EmptyMove</option>
+                                            </select>
+                                        </div>
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">起點樓層</label>
+                                            <select class="form-select p-0 w-50" name="FromFloor" required>
+                                                <option value="">請選擇</option>
+                                                <option value="1F">1F</option>
+                                                <option value="2F">2F</option>
+                                                <option value="3F">3F</option>
+                                                <option value="4F">4F</option>
+                                            </select>
+                                        </div>
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">終點樓層</label>
+                                            <select class="form-select p-0 w-50" name="ToFloor" required>
+                                                <option value="">請選擇</option>
+                                                <option value="1F">1F</option>
+                                                <option value="2F">2F</option>
+                                                <option value="3F">3F</option>
+                                                <option value="4F">4F</option>
+                                            </select>
+                                        </div>
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">TaskType</label>
+                                            <input class="form-control p-0 w-50" name="TaskType" autocomplete="off" required placeholder="例: F001" />
+                                        </div>
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">啟用狀態</label>
+                                            <select class="form-select p-0 w-25" name="UseFlag">
+                                                <option value="Y" selected>啟用</option>
+                                                <option value="N">停用</option>
+                                            </select>
+                                        </div>
+                                        <div class="col d-flex align-items-center">
+                                            <label class="me-3">備註</label>
+                                            <input class="form-control p-0 w-50" name="Remark" autocomplete="off" />
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </td>
+                        <td class="border-0 text-center">
+                            <button class="btn p-0" id="confirm-btn">
+                                <i class="fa-solid fa-square-check fa-xl" style="color: #4CCD99;"></i>
+                            </button>
+                            <button class="btn p-0" data-bs-toggle="collapse" data-bs-target="#insertcollapse" id="cancel-btn"><i class="fa-solid fa-square-minus fa-xl" style="color: #E25E3E;"></i></button>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="~/js/TaskTypeRoute.js"></script>
+}

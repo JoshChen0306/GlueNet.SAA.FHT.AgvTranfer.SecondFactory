@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AGV 自動歸位機制 — 流程圖</title>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 20px; background: #f8f9fa; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #bdc3c7; padding: 10px 14px; text-align: left; }
+        th { background: #3498db; color: #fff; }
+        tr:nth-child(even) { background: #ecf0f1; }
+        .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 15px 0; }
+        .mermaid { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <h1>AGV 自動歸位機制 — 流程圖</h1>
+    <p>建立日期：2026-03-20</p>
+
+    <h2>情境對照表</h2>
+    <table>
+        <tr>
+            <th>#</th><th>車輛狀態</th><th>車輛位置</th><th>歸位計時</th><th>歸位任務</th><th>佇列</th><th>處理方式</th>
+        </tr>
+        <tr><td>1</td><td>任務執行中</td><td>—</td><td>—</td><td>—</td><td>—</td><td>不處理，等任務完成</td></tr>
+        <tr><td>2</td><td>IDLE</td><td>4F（母樓層）</td><td>—</td><td>—</td><td>—</td><td>已在母樓層，不啟動歸位</td></tr>
+        <tr><td>3</td><td>IDLE</td><td>非 4F</td><td>未啟動</td><td>—</td><td>無任務</td><td>啟動閒置計時</td></tr>
+        <tr><td>4</td><td>IDLE</td><td>非 4F</td><td>計時中</td><td>—</td><td>無任務</td><td>繼續計時，不動作</td></tr>
+        <tr><td>5</td><td>IDLE</td><td>非 4F</td><td>已超時</td><td>—</td><td>無任務</td><td>產生 IDLE_RETURN 任務，派發至 RCS</td></tr>
+        <tr><td>6</td><td>IDLE</td><td>非 4F</td><td>計時中</td><td>—</td><td>有新任務</td><td>取消計時，交由佇列邏輯派發</td></tr>
+        <tr><td>7</td><td>IDLE</td><td>非 4F</td><td>—</td><td>已派發 RCS</td><td>無任務</td><td>歸位任務繼續執行</td></tr>
+        <tr><td>8</td><td>IDLE</td><td>非 4F</td><td>—</td><td>已派發 RCS</td><td>有新任務</td><td>不取消歸位，完成歸位後再接新任務</td></tr>
+    </table>
+
+    <h2>流程圖</h2>
+    <div class="note">
+        <strong>觸發時機：</strong>CrossFloorManager 定期檢查循環（與主循環同步，約每秒執行一次）
+    </div>
+    <div class="mermaid">
+flowchart TD
+    Start(["`**定期檢查循環**`"]) --> CheckBusy{"`車輛是否
+    在執行任務?`"}
+
+    CheckBusy -->|"Yes （情境 #1）"| Ignore1["`不處理
+    等任務完成`"]
+
+    CheckBusy -->|No| CheckFloor{"`車輛是否
+    在 4F（母樓層）?`"}
+
+    CheckFloor -->|"Yes （情境 #2）"| Ignore2["`已在母樓層
+    重置計時器
+    不啟動歸位`"]
+
+    CheckFloor -->|No| CheckReturnSent{"`歸位任務是否
+    已派發至 RCS?`"}
+
+    CheckReturnSent -->|Yes| CheckNewTask1{"`佇列是否
+    有新任務?`"}
+
+    CheckNewTask1 -->|"Yes （情境 #8）"| KeepReturn["`**不取消歸位**
+    新任務排入佇列
+    等歸位完成後處理`"]
+
+    CheckNewTask1 -->|"No （情境 #7）"| ContinueReturn["`歸位任務
+    繼續執行`"]
+
+    CheckReturnSent -->|No| CheckNewTask2{"`佇列是否
+    有新任務?`"}
+
+    CheckNewTask2 -->|"Yes （情境 #6）"| CancelTimer["`**取消計時**
+    重置計時器
+    交由佇列邏輯派發`"]
+
+    CheckNewTask2 -->|No| CheckTimerState{"`計時狀態?`"}
+
+    CheckTimerState -->|"未啟動 （情境 #3）"| StartTimer["`啟動閒置計時
+    IdleReturnTimeout 秒`"]
+
+    CheckTimerState -->|"計時中 （情境 #4）"| Wait["`繼續計時
+    不動作`"]
+
+    CheckTimerState -->|"已超時 （情境 #5）"| CreateReturn["`產生 IDLE_RETURN 任務
+    透過 ElevatorPathCalculator
+    計算歸位路徑
+    派發至 RCS`"]
+
+    style Start fill:#3498db,color:#fff
+    style Ignore1 fill:#95a5a6,color:#fff
+    style Ignore2 fill:#95a5a6,color:#fff
+    style KeepReturn fill:#e67e22,color:#fff
+    style ContinueReturn fill:#27ae60,color:#fff
+    style CancelTimer fill:#e74c3c,color:#fff
+    style StartTimer fill:#f39c12,color:#fff
+    style Wait fill:#95a5a6,color:#fff
+    style CreateReturn fill:#2ecc71,color:#fff
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' } });</script>
+</body>
+</html>

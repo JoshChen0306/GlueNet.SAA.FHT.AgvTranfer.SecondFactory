@@ -440,124 +440,227 @@ namespace HikAGVWebAPITests.App_Start
 
         #endregion
 
-        #region GetTaskType 路線對照表測試
+        #region GetTaskType 路線對照表測試（使用 List<oTaskTypeRouteModel>）
 
-        private const string SameFloorMap = "1F:F002,2F:F001";
-        private const string CrossFloorMap = "1F>3F:F13Test,3F>1F:F31Test,3F>4F:F34Test,4F>3F:F43Test,2F>4F:F24Test,4F>2F:F42Test";
         private const string DefaultTaskType = "F001";
+
+        private static List<oTaskTypeRouteModel> CreateTransportRoutes()
+        {
+            return new List<oTaskTypeRouteModel>
+            {
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "1F", ToFloor = "1F", TaskType = "F002", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "2F", ToFloor = "2F", TaskType = "F001", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "1F", ToFloor = "3F", TaskType = "F13Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "3F", ToFloor = "1F", TaskType = "F31Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "3F", ToFloor = "4F", TaskType = "F34Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "4F", ToFloor = "3F", TaskType = "F43Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "2F", ToFloor = "4F", TaskType = "F24Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "4F", ToFloor = "2F", TaskType = "F42Test", UseFlag = "Y" },
+            };
+        }
+
+        private static List<oTaskTypeRouteModel> CreateCrossFloorOnlyRoutes()
+        {
+            return new List<oTaskTypeRouteModel>
+            {
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "1F", ToFloor = "3F", TaskType = "F13Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "3F", ToFloor = "1F", TaskType = "F31Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "3F", ToFloor = "4F", TaskType = "F34Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "4F", ToFloor = "3F", TaskType = "F43Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "2F", ToFloor = "4F", TaskType = "F24Test", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "Transport", FromFloor = "4F", ToFloor = "2F", TaskType = "F42Test", UseFlag = "Y" },
+            };
+        }
 
         [TestMethod]
         public void GetTaskType_同樓層2F_M1到O1_無SameFloorMap_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("M1", "O1", "", CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("M1", "O1", CreateCrossFloorOnlyRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_同樓層1F_A1到C1_無SameFloorMap_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("A1", "C1", "", CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("A1", "C1", CreateCrossFloorOnlyRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_同樓層1F_A1到C1_有SameFloorMap_應該返回F002()
         {
-            var result = _calculator.GetTaskType("A1", "C1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("A1", "C1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F002", result);
         }
 
         [TestMethod]
         public void GetTaskType_同樓層2F_M1到O1_有SameFloorMap_應該返回F001()
         {
-            var result = _calculator.GetTaskType("M1", "O1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("M1", "O1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_同樓層3F_I1到J1_有SameFloorMap但無3F設定_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("I1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("I1", "J1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_1F到3F_G1到J1_應該返回F13Test()
         {
-            var result = _calculator.GetTaskType("G1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("G1", "J1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F13Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_3F到1F_J1到G1_應該返回F31Test()
         {
-            var result = _calculator.GetTaskType("J1", "G1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("J1", "G1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F31Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_3F到4F_J1到K1_應該返回F34Test()
         {
-            var result = _calculator.GetTaskType("J1", "K1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("J1", "K1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F34Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_4F到3F_K1到J1_應該返回F43Test()
         {
-            var result = _calculator.GetTaskType("K1", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("K1", "J1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F43Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_2F到4F_H1到K1_應該返回F24Test()
         {
-            var result = _calculator.GetTaskType("H1", "K1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("H1", "K1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F24Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_4F到2F_K1到H1_應該返回F42Test()
         {
-            var result = _calculator.GetTaskType("K1", "H1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("K1", "H1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F42Test", result);
         }
 
         [TestMethod]
         public void GetTaskType_未定義路線_1F到2F_應該返回預設TaskType()
         {
-            // 1F>2F 不在 CrossFloorMap 中
-            var result = _calculator.GetTaskType("G1", "H1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            // 1F>2F 不在路由清單中
+            var result = _calculator.GetTaskType("G1", "H1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
-        public void GetTaskType_空CrossFloorMap_應該返回預設TaskType()
+        public void GetTaskType_空路由清單_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("G1", "J1", "", "", DefaultTaskType);
+            var result = _calculator.GetTaskType("G1", "J1", new List<oTaskTypeRouteModel>(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_Null站點_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType(null, "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType(null, "J1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
         public void GetTaskType_空字串站點_應該返回預設TaskType()
         {
-            var result = _calculator.GetTaskType("", "J1", SameFloorMap, CrossFloorMap, DefaultTaskType);
+            var result = _calculator.GetTaskType("", "J1", CreateTransportRoutes(), DefaultTaskType);
             Assert.AreEqual("F001", result);
         }
 
         [TestMethod]
-        public void GetTaskType_對照表格式含空格_應該正確解析()
+        public void GetTaskType_Null路由清單_應該返回預設TaskType()
         {
-            var mapWithSpaces = "1F>3F : F13Test , 3F>1F : F31Test";
-            var result = _calculator.GetTaskType("G1", "J1", "", mapWithSpaces, DefaultTaskType);
-            Assert.AreEqual("F13Test", result);
+            var result = _calculator.GetTaskType("G1", "J1", null, DefaultTaskType);
+            Assert.AreEqual("F001", result);
+        }
+
+        #endregion
+
+        #region GetTaskType EmptyMove 空車移動測試
+
+        private static List<oTaskTypeRouteModel> CreateEmptyMoveRoutes()
+        {
+            return new List<oTaskTypeRouteModel>
+            {
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "1F", ToFloor = "4F", TaskType = "EM14", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "2F", ToFloor = "4F", TaskType = "EM24", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "3F", ToFloor = "4F", TaskType = "EM34", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "4F", ToFloor = "1F", TaskType = "EM41", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "4F", ToFloor = "2F", TaskType = "EM42", UseFlag = "Y" },
+                new oTaskTypeRouteModel { MoveType = "EmptyMove", FromFloor = "4F", ToFloor = "3F", TaskType = "EM43", UseFlag = "Y" },
+            };
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_2F到4F_應該返回EM24()
+        {
+            var result = _calculator.GetTaskType("H1", "K1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM24", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_4F到2F_應該返回EM42()
+        {
+            var result = _calculator.GetTaskType("K1", "H1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM42", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_1F到4F_應該返回EM14()
+        {
+            var result = _calculator.GetTaskType("G1", "K1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM14", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_3F到4F_應該返回EM34()
+        {
+            var result = _calculator.GetTaskType("J1", "K1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM34", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_4F到1F_應該返回EM41()
+        {
+            var result = _calculator.GetTaskType("K1", "G1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM41", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_4F到3F_應該返回EM43()
+        {
+            var result = _calculator.GetTaskType("K1", "J1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("EM43", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_EmptyMove_未定義路線_應該返回預設TaskType()
+        {
+            // EmptyMove 1F→2F 不在清單中
+            var result = _calculator.GetTaskType("G1", "H1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("F001", result);
+        }
+
+        [TestMethod]
+        public void GetTaskType_Transport和EmptyMove同路線不同TaskType()
+        {
+            // 同一路線 2F→4F，Transport 用 F24Test，EmptyMove 用 EM24
+            var transportResult = _calculator.GetTaskType("H1", "K1", CreateTransportRoutes(), DefaultTaskType);
+            var emptyMoveResult = _calculator.GetTaskType("H1", "K1", CreateEmptyMoveRoutes(), DefaultTaskType);
+            Assert.AreEqual("F24Test", transportResult);
+            Assert.AreEqual("EM24", emptyMoveResult);
+            Assert.AreNotEqual(transportResult, emptyMoveResult);
         }
 
         #endregion

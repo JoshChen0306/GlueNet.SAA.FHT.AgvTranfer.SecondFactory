@@ -117,7 +117,7 @@ namespace HikAGVWebAPI
             {
                 try
                 {
-                    UpdateAGVStatus();
+                    //UpdateAGVStatus();
                     AGVSchedulingTask();
                 }
                 catch (Exception ex)
@@ -475,12 +475,12 @@ namespace HikAGVWebAPI
                 var pathCalculator = new ElevatorPathCalculator(ElevatorSettings);
                 var fullPath = pathCalculator.CalculatePath(oMission.BeginStation, oMission.EndStation);
                 
-                // 根據路線查詢對應的 TaskType
+                // 根據路線查詢對應的 TaskType（從 DB 讀取路由清單）
+                var transportRoutes = mDB.Select_oTaskTypeRoute("Transport");
                 string actualTaskType = pathCalculator.GetTaskType(
                     oMission.BeginStation,
                     oMission.EndStation,
-                    hikAGV.AGVSettings.SameFloorTaskTypeMap,
-                    hikAGV.AGVSettings.CrossFloorTaskTypeMap,
+                    transportRoutes,
                     TaskType);  // 預設 TaskType（全域 fallback）
                 mLog.TraceOut($"TaskType: {actualTaskType}, Route: {pathCalculator.GetFloor(oMission.BeginStation)}>{pathCalculator.GetFloor(oMission.EndStation)}", Log.LogType.NONE);
                 

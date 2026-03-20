@@ -116,39 +116,6 @@ namespace HikAGVDll
             }
         }
 
-        /// <summary>
-        /// 各樓層站內 TaskType 對照表 (格式: "1F:F002,2F:F001,3F:F001,...")
-        /// 未設定的樓層 fallback 使用 AGVTaskType
-        /// </summary>
-        [ConfigurationProperty("SameFloorTaskTypeMap", DefaultValue = "")]
-        public string SameFloorTaskTypeMap
-        {
-            get
-            {
-                return (string)this["SameFloorTaskTypeMap"];
-            }
-            private set
-            {
-                this["SameFloorTaskTypeMap"] = value;
-            }
-        }
-
-        /// <summary>
-        /// 跨樓層 TaskType 對照表 (格式: "1F>3F:F13Test,3F>1F:F31Test,...")
-        /// </summary>
-        [ConfigurationProperty("CrossFloorTaskTypeMap", DefaultValue = "1F>3F:F13Test,3F>1F:F31Test,3F>4F:F34Test,4F>3F:F43Test,2F>4F:F24Test,4F>2F:F42Test")]
-        public string CrossFloorTaskTypeMap
-        {
-            get
-            {
-                return (string)this["CrossFloorTaskTypeMap"];
-            }
-            private set
-            {
-                this["CrossFloorTaskTypeMap"] = value;
-            }
-        }
-
         [ConfigurationProperty("WarnContent", DefaultValue = "安全告警-前碰撞条触发,安全告警-后碰撞条触发")]
         public string WarnContent
         {
