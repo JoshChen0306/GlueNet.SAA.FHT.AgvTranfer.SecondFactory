@@ -90,19 +90,6 @@ namespace HikAGVDll
 
     public class AGVSettings : ConfigurationElement
     {
-        [ConfigurationProperty("AGVMapCode", DefaultValue = "")]
-        public string AGVMapCode
-        {
-            get
-            {
-                return (string)this["AGVMapCode"];
-            }
-            private set
-            {
-                this["AGVMapCode"] = value;
-            }
-        }
-
         [ConfigurationProperty("AGVTaskType", DefaultValue = "")]
         public string AGVTaskType
         {
