@@ -259,14 +259,16 @@ namespace HikAGVWebAPI
             {
                 if (isGoingUp)
                 {
-                    // 上行：客梯(起→3F) → 客貨梯(3F→終)
+                    // 上行：客梯(起→3F) → 出客梯等待點(W1) → 客貨梯(3F→終)
                     AddElevatorPath(path, fromFloor, "3F", true, isCustomer: true);
+                    path.Add(_customerWaitPoints["3F"]);
                     AddElevatorPath(path, "3F", toFloor, true, isCustomer: false);
                 }
                 else
                 {
-                    // 下行：客貨梯(起→3F) → 客梯(3F→終)
+                    // 下行：客貨梯(起→3F) → 出客貨梯等待點(X1) → 客梯(3F→終)
                     AddElevatorPath(path, fromFloor, "3F", false, isCustomer: false);
+                    path.Add(_freightWaitPoints["3F"]);
                     AddElevatorPath(path, "3F", toFloor, false, isCustomer: true);
                 }
             }
