@@ -740,5 +740,99 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         #endregion
+
+        #region BuildReturnPath 雙電梯換乘測試（空車移動補齊 3F 出口等待點）
+
+        [TestMethod]
+        public void BuildReturnPath_上行_1F到4F_應包含W1出口等待點()
+        {
+            // Arrange
+            string fromFloor = "1F";
+            string toFloor = "4F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert
+            var expected = new List<string> { "U1", "U2", "W2", "W1", "X1", "X2", "Y2", "Y1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_上行_2F到4F_應包含W1出口等待點()
+        {
+            // Arrange
+            string fromFloor = "2F";
+            string toFloor = "4F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert
+            var expected = new List<string> { "V1", "V2", "W2", "W1", "X1", "X2", "Y2", "Y1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_下行_4F到1F_應包含X1出口等待點()
+        {
+            // Arrange
+            string fromFloor = "4F";
+            string toFloor = "1F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert
+            var expected = new List<string> { "Y1", "Y2", "X2", "X1", "W1", "W2", "U2", "U1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_下行_4F到2F_應包含X1出口等待點()
+        {
+            // Arrange
+            string fromFloor = "4F";
+            string toFloor = "2F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert
+            var expected = new List<string> { "Y1", "Y2", "X2", "X1", "W1", "W2", "V2", "V1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_3F到4F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "3F";
+            string toFloor = "4F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "X1", "X2", "Y2", "Y1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_4F到3F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "4F";
+            string toFloor = "3F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "Y1", "Y2", "X2", "X1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        #endregion
     }
 }
