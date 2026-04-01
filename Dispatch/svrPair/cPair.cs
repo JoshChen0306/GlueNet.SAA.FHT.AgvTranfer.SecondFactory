@@ -524,6 +524,17 @@ namespace svrPair
             // 上料區無空平板
             if (loadingHaveFlag != "1")
             {
+                // ★ 上料區雖已無空板，但路徑仍被占用（AGV 正在搬走途中），繼續卡控
+                // 避免 M→O 跑進 ProcessoNeedToRequire 後被 CheckoPortBgnToEndIsNullAndUseFlagAsY 標記為 E 刪除
+                DataTable dtBgn = mSql.QuerySqlByAutoOpen(
+                    "SELECT BgnToEnd FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+                string bgnToEnd = dtBgn.Rows.Count > 0 ? dtBgn.Rows[0]["BgnToEnd"].ToString().Trim() : "";
+                if (!string.IsNullOrEmpty(bgnToEnd))
+                {
+                    WriteLog(string.Format("05A.空平板卡控 >> 上料區 {0} 路徑仍被占用 ({1})，AGV 搬板途中，繼續卡控等待", endStation, bgnToEnd));
+                    return true;
+                }
+
                 if (unloadingHaveFlag == "1")
                 {
                     // 下料區有空平板，不需回收，正常派送
