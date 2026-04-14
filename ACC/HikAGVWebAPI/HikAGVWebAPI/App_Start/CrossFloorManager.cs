@@ -85,6 +85,18 @@ namespace HikAGVWebAPI.App_Start
                     return;
                 }
 
+                // oMission 交叉檢查：RCS 回報非執行狀態，但 oMission 仍有跨樓層任務在跑
+                // （跨樓層途中 RCS 可能短暫回報非執行狀態，如等電梯、遇障暫停）
+                if (HasRunningCrossFloorMission())
+                {
+                    if (_idleStartTime != null)
+                    {
+                        _mLog.TraceOut($"[CrossFloor] 跨樓層任務執行中（oMission OkFlag=R），重置歸位計時", Log.LogType.NONE);
+                        ResetIdleTimer();
+                    }
+                    return;
+                }
+
                 // 車輛 IDLE
                 if (shuttle.Status == "I")
                 {
@@ -246,6 +258,20 @@ namespace HikAGVWebAPI.App_Start
         }
 
         // ─── 私有方法 ─────────────────────────────────────────────
+
+        private bool HasRunningCrossFloorMission()
+        {
+            try
+            {
+                var missions = _mDB.Select_oMission();
+                return missions.Any(m => m.OkFlag == "R" && IsMissionForCrossFloorShuttle(m));
+            }
+            catch (Exception ex)
+            {
+                _mLog.TraceOut($"[CrossFloor] HasRunningCrossFloorMission Exception: {ex.Message}", Log.LogType.NONE);
+                return false;
+            }
+        }
 
         private oShuttleModel GetShuttleStatus()
         {
