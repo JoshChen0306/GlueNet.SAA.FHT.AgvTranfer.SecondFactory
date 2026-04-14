@@ -88,6 +88,17 @@ namespace HikAGVWebAPI
                             mLog.TraceOut($"AGV End Finish!", Log.LogType.NONE);
                             break;
                         case CallBackMethod.cancel:
+                            UpdateCancel(oMission);
+                            if (oMission?.TaskSource == CrossFloorManager.IDLE_RETURN)
+                            {
+                                mLog.TraceOut($"[CrossFloor] 歸位任務 Callback cancel，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                                Dispatch.CrossFloor?.OnIdleReturnCompleted();
+                            }
+                            else if (oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
+                            {
+                                mLog.TraceOut($"[CrossFloor] 預調度任務 Callback cancel，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted();
+                            }
                             mLog.TraceOut($"AGV Cancel Finish!", Log.LogType.NONE);
                             break;
                         case CallBackMethod.apply:
@@ -196,6 +207,31 @@ namespace HikAGVWebAPI
             catch (Exception ex)
             {
                 mLog.TraceOut($"UpdateEnd Exception! [Exception] : {ex.Message}", Log.LogType.ERROR);
+            }
+        }
+
+        /// <summary>
+        /// AGV 任務取消（RCS 回報 cancel callback）
+        /// 清理 oMission 並歸檔至 ubMission，避免殘留 OkFlag=R 的孤兒記錄
+        /// </summary>
+        private void UpdateCancel(oMissionModel oMission)
+        {
+            try
+            {
+                if (oMission != null)
+                {
+                    oMission.OkFlag = "C";
+                    oMission.EndTime = DateTime.Now.ToString("yyyyMMddHHmmssffffff");
+                    mDB.Update_oMissionEndTime(oMission);
+                    mDB.Insert_ubMission(oMission);
+                    mDB.Delete_oMission(oMission);
+                    mDB.Update_oShuttleStation(oMission, "I");
+                    mLog.TraceOut($"Update Cancel Job Finish!", Log.LogType.NONE);
+                }
+            }
+            catch (Exception ex)
+            {
+                mLog.TraceOut($"UpdateCancel Exception! [Exception] : {ex.Message}", Log.LogType.ERROR);
             }
         }
 
