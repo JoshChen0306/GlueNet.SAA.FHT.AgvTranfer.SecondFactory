@@ -34,4 +34,6 @@ public partial class oMission
     public string? BeginTime { get; set; }
 
     public string? EndTime { get; set; }
+
+    public string? ParentTaskDateTime { get; set; }
 }

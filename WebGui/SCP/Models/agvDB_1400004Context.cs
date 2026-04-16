@@ -62,6 +62,7 @@ public partial class agvDB_1400004Context : DbContext
             entity.Property(e => e.TaskDateTime).HasMaxLength(20);
             entity.Property(e => e.TaskSource).HasMaxLength(20);
             entity.Property(e => e.WorkOrder).HasMaxLength(100);
+            entity.Property(e => e.ParentTaskDateTime).HasMaxLength(50);
         });
 
         modelBuilder.Entity<oNeed>(entity =>

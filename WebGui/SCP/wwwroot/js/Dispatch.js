@@ -878,8 +878,7 @@ $(function () {
         //}
 
         var data = {}
-        data["beginStation"] = $row.find("td:eq(1)").text();
-        data["endStation"] = $row.find("td:eq(2)").text();
+        data["taskDateTime"] = $row.attr("data-taskdatetime");
 
         $.ajax({
             type: "POST",

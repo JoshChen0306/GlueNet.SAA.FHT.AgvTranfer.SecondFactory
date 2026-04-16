@@ -592,7 +592,11 @@ namespace HikAGVWebAPI
             {
                 foreach (oMissionModel DeleteMission in oMissionDetete)
                 {
-                    // 若任務已派發至 RCS (有 TaskCode)，先呼叫海康取消任務 API
+                    bool isCrossFloorTask = DeleteMission.TaskSource == CrossFloorManager.IDLE_RETURN
+                                         || DeleteMission.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH;
+
+                    string rcsCancelResult = "";
+
                     if (!string.IsNullOrEmpty(DeleteMission.TaskCode))
                     {
                         CancelTask preCancelRequest = new CancelTask()
@@ -606,36 +610,59 @@ namespace HikAGVWebAPI
                         CancelTaskAck ack = hikAGV.CancelTask(preCancelRequest);
 
                         mLog.TraceOut($"Cancel Task API Response: {ack?.ToString()}", Log.LogType.NONE);
+                        rcsCancelResult = ack?.ToString() ?? "null";
 
                         if (ack?.code != "0")
                         {
-                            // 檢查是否為「任務已結束或已取消」的情況，若是則允許刪除本地記錄
                             bool isTaskAlreadyCancelled = !string.IsNullOrEmpty(ack?.message) &&
                                 (ack.message.Contains("已结束") || ack.message.Contains("已取消") || ack.message.Contains("不存在"));
 
-                            if (!isTaskAlreadyCancelled)
+                            if (!isTaskAlreadyCancelled && !isCrossFloorTask)
                             {
+                                // 一般任務：取消失敗，暫不刪除，等待下次重試
                                 mLog.TraceOut($"Cancel Task Failed! TaskCode: {DeleteMission.TaskCode}, Message: {ack?.message}", Log.LogType.NONE);
-                                continue; // 取消失敗，暫不刪除，等待下次重試
+                                continue;
                             }
 
-                            mLog.TraceOut($"Task already cancelled in RCS, proceed to delete local record. TaskCode: {DeleteMission.TaskCode}", Log.LogType.NONE);
+                            if (isCrossFloorTask)
+                            {
+                                // 跨樓層任務：fire-and-forget，不管 RCS 回應，直接清理本地記錄
+                                mLog.TraceOut($"[CrossFloor] RCS Cancel 回應非成功（{ack?.message}），但跨樓層任務走 fire-and-forget，強制清理本地記錄", Log.LogType.NONE);
+                            }
+                            else
+                            {
+                                mLog.TraceOut($"Task already cancelled in RCS, proceed to delete local record. TaskCode: {DeleteMission.TaskCode}", Log.LogType.NONE);
+                            }
                         }
                     }
 
+                    // 歸檔 + 刪除本地記錄
+                    mDB.Insert_ubMission(DeleteMission);
                     mDB.Delete_oMission(DeleteMission);
                     mLog.TraceOut($"Delete Cancel Mission! {DeleteMission?.ToString()}", Log.LogType.NONE);
 
-                    // 通知 CrossFloorManager 重置旗標（與 CallBackAPI cancel case 一致）
-                    if (DeleteMission.TaskSource == CrossFloorManager.IDLE_RETURN)
+                    // 跨樓層任務：寫入 ubCancelLog + 通知 CrossFloorManager 重置旗標
+                    if (isCrossFloorTask)
                     {
-                        mLog.TraceOut($"[CrossFloor] SCP 取消歸位任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
-                        CrossFloor?.OnIdleReturnCompleted();
-                    }
-                    else if (DeleteMission.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
-                    {
-                        mLog.TraceOut($"[CrossFloor] SCP 取消預調度任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
-                        CrossFloor?.OnCrossFloorDispatchCompleted();
+                        mDB.Insert_ubCancelLog(
+                            DeleteMission.TaskDateTime,
+                            DeleteMission.ParentTaskDateTime,
+                            DeleteMission.TaskSource,
+                            DeleteMission.BeginStation,
+                            DeleteMission.EndStation,
+                            DeleteMission.TaskCode,
+                            rcsCancelResult);
+
+                        if (DeleteMission.TaskSource == CrossFloorManager.IDLE_RETURN)
+                        {
+                            mLog.TraceOut($"[CrossFloor] SCP 取消歸位任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                            CrossFloor?.OnIdleReturnCompleted();
+                        }
+                        else if (DeleteMission.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
+                        {
+                            mLog.TraceOut($"[CrossFloor] SCP 取消預調度任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                            CrossFloor?.OnCrossFloorDispatchCompleted();
+                        }
                     }
                 }
             }

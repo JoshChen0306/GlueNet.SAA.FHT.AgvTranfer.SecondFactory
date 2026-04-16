@@ -46,6 +46,15 @@ namespace HikAGVWebAPI.App_Start
             mSql.WriteSqlByAutoOpen(sSQL);
         }
 
+        public void Insert_ubCancelLog(string taskDateTime, string parentTaskDateTime, string taskSource, string beginStation, string endStation, string taskCode, string rcsCancelResult)
+        {
+            string parentTDT = string.IsNullOrEmpty(parentTaskDateTime) ? "NULL" : $"'{parentTaskDateTime}'";
+            string sSQL = $@"insert into ubCancelLog
+                                    (CancelTime, TaskDateTime, ParentTaskDateTime, TaskSource, BeginStation, EndStation, TaskCode, RcsCancelResult)
+                             values (GETDATE(), '{taskDateTime}', {parentTDT}, '{taskSource}', '{beginStation}', '{endStation}', '{taskCode}', '{rcsCancelResult}') ";
+            mSql.WriteSqlByAutoOpen(sSQL);
+        }
+
         public void Insert_ubActivation(ubActivationModel ActivationModel)
         {
             string sSQL = $@"insert into ubActivation

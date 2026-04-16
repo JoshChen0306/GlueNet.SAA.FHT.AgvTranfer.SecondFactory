@@ -10,7 +10,7 @@
     {
         @foreach (var item in ViewBag.Dispatchs)
         {
-            <tr>
+            <tr data-taskdatetime="@item.TaskDateTime">
                 <td class="align-middle">@i</td>
                 <td class="align-middle">@item.BeginStation</td>
                 <td class="align-middle">@item.EndStation</td>

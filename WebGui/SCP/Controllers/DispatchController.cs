@@ -140,6 +140,7 @@ namespace SCP.Controllers
                 .ToList()
                 .Select(item => new
                 {
+                    item.TaskDateTime,
                     item.BeginStation,
                     item.EndStation,
                     WorkOrder = item.WorkOrder.Split('^').Length > 3 ? item.WorkOrder.Split('^')[3] : string.Empty,
@@ -268,23 +269,56 @@ namespace SCP.Controllers
 
         public IActionResult DeleteoNeed([FromBody] Dictionary<string, string> need)
         {
-            string begingStation = need["beginStation"];
-            string endStation = need["endStation"];
+            string taskDateTime = need["taskDateTime"];
 
             try
             {
-                _DBContext.oRequire
-                    .Where(p => p.BeginStation == begingStation && p.EndStation == endStation)
-                    .ExecuteUpdate(setters => setters
-                        .SetProperty(p => p.OkFlag, "C"));
-                _DBContext.oMission
-                   .Where(p => p.BeginStation == begingStation && p.EndStation == endStation)
-                   .ExecuteUpdate(setters => setters
-                       .SetProperty(p => p.OkFlag, "C"));
+                using var transaction = _DBContext.Database.BeginTransaction();
+
+                // 查詢被取消任務的 oMission（取得 ParentTaskDateTime 判斷關聯）
+                var targetMission = _DBContext.oMission
+                    .FirstOrDefault(m => m.TaskDateTime == taskDateTime);
+
+                // 收集所有要取消的 TaskDateTime（含連動）
+                var cancelList = new List<string> { taskDateTime };
+
+                if (targetMission != null)
+                {
+                    if (!string.IsNullOrEmpty(targetMission.ParentTaskDateTime))
+                    {
+                        // 被取消的是預調度 → 連動取消其 MCS 父任務（MCS 先取消）
+                        cancelList.Insert(0, targetMission.ParentTaskDateTime);
+                    }
+
+                    // 查詢以此任務為 Parent 的預調度任務（被取消的是 MCS → 連動取消預調度）
+                    var childTasks = _DBContext.oMission
+                        .Where(m => m.ParentTaskDateTime == taskDateTime)
+                        .Select(m => m.TaskDateTime)
+                        .ToList();
+                    foreach (var childTDT in childTasks)
+                    {
+                        if (!cancelList.Contains(childTDT))
+                            cancelList.Add(childTDT);
+                    }
+                }
+
+                // 依序取消所有關聯任務（MCS 優先）
+                foreach (var tdt in cancelList)
+                {
+                    _DBContext.oMission
+                        .Where(m => m.TaskDateTime == tdt)
+                        .ExecuteUpdate(setters => setters.SetProperty(m => m.OkFlag, "C"));
+
+                    _DBContext.oRequire
+                        .Where(r => r.TaskDateTime == tdt)
+                        .ExecuteUpdate(setters => setters.SetProperty(r => r.OkFlag, "C"));
+                }
+
+                transaction.Commit();
             }
             catch (Exception ex)
             {
-
+                Console.WriteLine($"[DeleteoNeed] 取消任務失敗：TaskDateTime={taskDateTime}, Error={ex.Message}");
             }
             return Ok();
         }
