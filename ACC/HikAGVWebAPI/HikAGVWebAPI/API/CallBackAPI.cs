@@ -222,6 +222,7 @@ namespace HikAGVWebAPI
                 {
                     oMission.OkFlag = "C";
                     oMission.EndTime = DateTime.Now.ToString("yyyyMMddHHmmssffffff");
+                    mDB.Update_oRequire(oMission);
                     mDB.Update_oMissionEndTime(oMission);
                     mDB.Insert_ubMission(oMission);
                     mDB.Delete_oMission(oMission);

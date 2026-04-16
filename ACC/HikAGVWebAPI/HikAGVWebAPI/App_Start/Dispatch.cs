@@ -625,6 +625,18 @@ namespace HikAGVWebAPI
 
                     mDB.Delete_oMission(DeleteMission);
                     mLog.TraceOut($"Delete Cancel Mission! {DeleteMission?.ToString()}", Log.LogType.NONE);
+
+                    // 通知 CrossFloorManager 重置旗標（與 CallBackAPI cancel case 一致）
+                    if (DeleteMission.TaskSource == CrossFloorManager.IDLE_RETURN)
+                    {
+                        mLog.TraceOut($"[CrossFloor] SCP 取消歸位任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                        CrossFloor?.OnIdleReturnCompleted();
+                    }
+                    else if (DeleteMission.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
+                    {
+                        mLog.TraceOut($"[CrossFloor] SCP 取消預調度任務，通知 CrossFloorManager 重置", Log.LogType.NONE);
+                        CrossFloor?.OnCrossFloorDispatchCompleted();
+                    }
                 }
             }
             catch (Exception ex)

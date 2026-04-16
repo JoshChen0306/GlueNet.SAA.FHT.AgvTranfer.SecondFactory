@@ -244,11 +244,12 @@ namespace HikAGVWebAPI.App_Start
                 }
 
                 // 無同樓層任務 → 產生預調度任務，將車移至最早任務的起點樓層
-                string targetFloor = _pathCalculator.GetFloor(normalTasks.First().BeginStation);
+                var triggerTask = normalTasks.First();
+                string targetFloor = _pathCalculator.GetFloor(triggerTask.BeginStation);
                 if (string.IsNullOrEmpty(currentFloor) || string.IsNullOrEmpty(targetFloor))
                     return null;
 
-                return DispatchCrossFloor(currentFloor, targetFloor);
+                return DispatchCrossFloor(currentFloor, targetFloor, triggerTask.TaskDateTime);
             }
             catch (Exception ex)
             {
@@ -326,9 +327,10 @@ namespace HikAGVWebAPI.App_Start
                 };
 
                 _mDB.Insert_oMission(mission);
+                _mDB.Insert_oRequire(mission);
                 _idleReturnDispatched = true;
                 ResetIdleTimer();
-                _mLog.TraceOut($"[CrossFloor] 歸位任務已寫入 oMission，{fromFloor}→{_idleReturnFloor}（{mission.BeginStation}→{mission.EndStation}）", Log.LogType.NONE);
+                _mLog.TraceOut($"[CrossFloor] 歸位任務已寫入 oMission + oRequire，{fromFloor}→{_idleReturnFloor}（{mission.BeginStation}→{mission.EndStation}）", Log.LogType.NONE);
             }
             catch (Exception ex)
             {
@@ -342,9 +344,10 @@ namespace HikAGVWebAPI.App_Start
         }
 
         /// <summary>
-        /// 建立預調度任務寫入 oMission，將車移至 toFloor 電梯等待點
+        /// 建立預調度任務寫入 oMission + oRequire，將車移至 toFloor 電梯等待點
         /// </summary>
-        private oMissionModel DispatchCrossFloor(string fromFloor, string toFloor)
+        /// <param name="parentTaskDateTime">觸發此預調度的 MCS 任務 TaskDateTime</param>
+        private oMissionModel DispatchCrossFloor(string fromFloor, string toFloor, string parentTaskDateTime)
         {
             try
             {
@@ -364,11 +367,13 @@ namespace HikAGVWebAPI.App_Start
                     TaskSource = CROSS_FLOOR_DISPATCH,
                     RackId = "-1",
                     WorkOrder = "",
+                    ParentTaskDateTime = parentTaskDateTime,
                 };
 
                 _mDB.Insert_oMission(mission);
+                _mDB.Insert_oRequire(mission);
                 _crossFloorDispatchPending = true;
-                _mLog.TraceOut($"[CrossFloor] 預調度任務已寫入 oMission，{fromFloor}→{toFloor}（{mission.BeginStation}→{mission.EndStation}）", Log.LogType.NONE);
+                _mLog.TraceOut($"[CrossFloor] 預調度任務已寫入 oMission + oRequire，{fromFloor}→{toFloor}（{mission.BeginStation}→{mission.EndStation}），關聯 MCS TaskDateTime={parentTaskDateTime}", Log.LogType.NONE);
                 return mission;
             }
             catch (Exception ex)
