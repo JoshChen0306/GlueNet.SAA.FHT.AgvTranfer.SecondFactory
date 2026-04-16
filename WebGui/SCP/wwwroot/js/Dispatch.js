@@ -869,7 +869,7 @@ $(function () {
     $("#CancleButton").on("click", function () {
 
         var $row = $("#DispatchStatus").find("tr").eq(rowData["index"])
-        var status = $row.find("td:eq(4)").text();
+        var status = $row.find("td:eq(5)").text();
         //if (status === "執行中") {
         //    alert("任務已執行。");
         //    // 關閉 Modal 視窗

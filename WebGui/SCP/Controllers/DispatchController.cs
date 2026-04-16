@@ -144,6 +144,7 @@ namespace SCP.Controllers
                     item.BeginStation,
                     item.EndStation,
                     WorkOrder = item.WorkOrder.Split('^').Length > 3 ? item.WorkOrder.Split('^')[3] : string.Empty,
+                    TaskType = item.TaskSource == "CROSS_FLOOR_DISPATCH" ? "跨樓層預調度" : item.TaskSource == "IDLE_RETURN" ? "歸位" : "一般搬運",
                     Status = item.AssignFlag == "Y" && item.OkFlag == "R" ? "執行中" : item.AssignFlag == "Y" ? "已派車" : item.AssignFlag == "C" ? "取消" : "異常",
                     TextColor = item.AssignFlag == "Y" && item.OkFlag == "R" ? "text-primary" : item.AssignFlag == "Y" ? "text-success" : item.AssignFlag == "C" ? "text-secondary" : "text-danger"
                 });
