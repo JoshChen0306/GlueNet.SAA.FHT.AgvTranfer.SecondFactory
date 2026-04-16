@@ -371,9 +371,9 @@ namespace HikAGVWebAPI.App_Start
                 };
 
                 _mDB.Insert_oMission(mission);
-                _mDB.Insert_oRequire(mission);
+                // 預調度不寫 oRequire（方案 A：SCP 隱藏預調度，取消 MCS 時透過 ParentTaskDateTime 連動取消）
                 _crossFloorDispatchPending = true;
-                _mLog.TraceOut($"[CrossFloor] 預調度任務已寫入 oMission + oRequire，{fromFloor}→{toFloor}（{mission.BeginStation}→{mission.EndStation}），關聯 MCS TaskDateTime={parentTaskDateTime}", Log.LogType.NONE);
+                _mLog.TraceOut($"[CrossFloor] 預調度任務已寫入 oMission，{fromFloor}→{toFloor}（{mission.BeginStation}→{mission.EndStation}），關聯 MCS TaskDateTime={parentTaskDateTime}", Log.LogType.NONE);
                 return mission;
             }
             catch (Exception ex)
