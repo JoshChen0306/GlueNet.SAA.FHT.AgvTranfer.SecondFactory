@@ -99,6 +99,17 @@ namespace HikAGVWebAPI
                                 mLog.TraceOut($"[CrossFloor] 預調度任務 Callback cancel，通知 CrossFloorManager 重置", Log.LogType.NONE);
                                 Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted();
                             }
+
+                            if ((oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH
+                                 || oMission?.TaskSource == CrossFloorManager.IDLE_RETURN)
+                                && !string.IsNullOrEmpty(oMission?.ParentTaskDateTime))
+                            {
+                                mDB.Update_oMissionOkFlag(oMission.ParentTaskDateTime, "C");
+                                mDB.Update_oRequireOkFlag(oMission.ParentTaskDateTime, "C");
+                                mLog.TraceOut($"[CrossFloor] 連動取消父任務 ParentTaskDateTime={oMission.ParentTaskDateTime}，oMission/oRequire OkFlag 皆設為 C",
+                                    Log.LogType.NONE);
+                            }
+
                             mLog.TraceOut($"AGV Cancel Finish!", Log.LogType.NONE);
                             break;
                         case CallBackMethod.apply:

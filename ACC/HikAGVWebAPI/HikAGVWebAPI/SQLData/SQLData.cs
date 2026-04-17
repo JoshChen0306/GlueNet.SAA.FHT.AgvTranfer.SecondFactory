@@ -183,6 +183,31 @@ namespace HikAGVWebAPI.App_Start
             mSql.WriteSqlByAutoOpen(sSQL);
         }
 
+        /// <summary>
+        /// 依 TaskDateTime 更新 oMission.OkFlag（用於父任務連動取消）
+        /// 與 Update_oMissionEndTime 不同：只用 TaskDateTime 一個條件
+        /// </summary>
+        public void Update_oMissionOkFlag(string taskDateTime, string okFlag)
+        {
+            string sSQL = $@"update oMission
+                                set OkFlag = '{okFlag}'
+                                   ,EndTime = '{DateTime.Now:yyyyMMddHHmmssffffff}'
+                              where TaskDateTime = '{taskDateTime}' ";
+            mSql.WriteSqlByAutoOpen(sSQL);
+        }
+
+        /// <summary>
+        /// 依 TaskDateTime 更新 oRequire.OkFlag（用於父任務連動取消）
+        /// 與 Update_oRequire 不同：只用 TaskDateTime 一個條件，涵蓋 MCS 被 cPair 拆成多段的所有 oRequire
+        /// </summary>
+        public void Update_oRequireOkFlag(string taskDateTime, string okFlag)
+        {
+            string sSQL = $@"update oRequire
+                                set OkFlag = '{okFlag}'
+                              where TaskDateTime = '{taskDateTime}' ";
+            mSql.WriteSqlByAutoOpen(sSQL);
+        }
+
         public void Update_oPortEmpty(string StationNo)
         {
             string sSQL = $@"update oPort
