@@ -57,6 +57,8 @@
     <Otherwise />
   </Choose>
   <ItemGroup>
+    <Compile Include="App_Start\CrossFloorManagerCooldownTests.cs" />
+    <Compile Include="App_Start\CrossFloorManagerSelectNextMissionTests.cs" />
     <Compile Include="App_Start\ElevatorPathCalculatorTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
