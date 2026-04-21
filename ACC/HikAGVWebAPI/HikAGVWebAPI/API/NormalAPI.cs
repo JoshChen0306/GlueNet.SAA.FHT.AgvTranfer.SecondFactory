@@ -14,7 +14,7 @@ namespace HikAGVWebAPI
         //public const string AGVStatusRoute = "rcms-dps/rest/";
 
         // ★ 模擬用：跨樓層車輛 AGV3 目前所在 MapCode（任務完成後自動更新）
-        private static string _mockAgv3MapCode = "DD"; // 初始：3F
+        private static string _mockAgv3MapCode = "FF"; // 初始：3F
 
         // ★ 模擬用：電梯等待點 → MapCode 對照（對應 FHtSetting.config 的電梯設定）
         private static readonly Dictionary<string, string> _elevatorWaitPointToMapCode
@@ -96,11 +96,11 @@ namespace HikAGVWebAPI
                     await PostCallback(httpClient, callbackUrl, endPayload);
 
                     // ★ end callback 後，更新 AGV3 的模擬 MapCode（讓下次 AGVStatus 輪詢回傳正確位置）
-                    if (endStation != null &&
-                        _elevatorWaitPointToMapCode.TryGetValue(endStation, out string destMapCode))
-                    {
-                        _mockAgv3MapCode = destMapCode;
-                    }
+                    //if (endStation != null &&
+                    //    _elevatorWaitPointToMapCode.TryGetValue(endStation, out string destMapCode))
+                    //{
+                    //    _mockAgv3MapCode = destMapCode;
+                    //}
                 }
             }
             catch (Exception ex)
