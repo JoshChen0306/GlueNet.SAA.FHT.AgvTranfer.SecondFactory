@@ -125,6 +125,19 @@ namespace HikAGVWebAPI.App_Start
             mSql.WriteSqlByAutoOpen(sSQL);
         }
 
+        /// <summary>
+        /// 依 ShuttleId 即時更新 oShuttle.MapCode（callback end/cancel 時呼叫）
+        /// 用於縮短 UpdateAGVStatus 輪詢窗口中被幽靈 MapCode 覆蓋的時間
+        /// </summary>
+        public void Update_oShuttleMapCode(string shuttleId, string mapCode)
+        {
+            string sSQL = $@"update oShuttle
+                                set MapCode = '{mapCode}'
+                                   ,UpdateTime = GETDATE()
+                              where ShuttleId = {shuttleId} ";
+            mSql.WriteSqlByAutoOpen(sSQL);
+        }
+
         public void Update_oShuttleStation(oMissionModel oMission, string Status)
         {
             string sSQL = $@"update oShuttle
