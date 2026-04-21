@@ -1,84 +1,74 @@
 ﻿using System;
+using HikAGVWebAPI.App_Start;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace HikAGVWebAPITests.App_Start
 {
     /// <summary>
     /// 冷卻期核心邏輯單元測試（對應工作計畫 Task 3）
-    /// 測試對象：CrossFloorManager 內的冷卻期判斷（IsInCooldown / RecordCompletion）
-    /// 實作建議：將冷卻期邏輯抽成純類別 CooldownTracker，避免依賴 SQLData/Log 等外部元件
+    /// 測試對象：CooldownTracker（純類別，不依賴 SQLData / Log 等外部元件）
     /// </summary>
     [TestClass]
     public class CrossFloorManagerCooldownTests
     {
-        // TODO: 實作 CooldownTracker 後取消註解
-        // private CooldownTracker _tracker;
-
-        [TestInitialize]
-        public void Setup()
-        {
-            // TODO: _tracker = new CooldownTracker(cooldownSeconds: 30);
-        }
-
         #region Happy Path
 
         [TestMethod]
         public void IsInCooldown_未呼叫過RecordCompletion_回傳false()
         {
             // Arrange
-            // TODO: 使用 _tracker（初始狀態）
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
 
             // Act
-            // bool result = _tracker.IsInCooldown("P1");
+            bool result = tracker.IsInCooldown("P1");
 
             // Assert
-            // Assert.IsFalse(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            Assert.IsFalse(result);
         }
 
         [TestMethod]
         public void IsInCooldown_RecordCompletion後立即查同parent_回傳true()
         {
             // Arrange
-            // _tracker.RecordCompletion("P1");
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
+            tracker.RecordCompletion("P1");
 
             // Act
-            // bool result = _tracker.IsInCooldown("P1");
+            bool result = tracker.IsInCooldown("P1");
 
             // Assert
-            // Assert.IsTrue(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            Assert.IsTrue(result);
         }
 
         [TestMethod]
         public void IsInCooldown_RecordCompletion後查不同parent_回傳false()
         {
             // Arrange
-            // _tracker.RecordCompletion("P1");
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
+            tracker.RecordCompletion("P1");
 
             // Act
-            // bool result = _tracker.IsInCooldown("P2");
+            bool result = tracker.IsInCooldown("P2");
 
             // Assert
-            // Assert.IsFalse(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            Assert.IsFalse(result);
         }
 
         [TestMethod]
         public void RecordCompletion_連續呼叫兩次_以最新一筆為準()
         {
             // Arrange
-            // _tracker.RecordCompletion("P1");
-            // _tracker.RecordCompletion("P2");
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
+            tracker.RecordCompletion("P1");
+            tracker.RecordCompletion("P2");
 
             // Act
-            // bool p1Result = _tracker.IsInCooldown("P1");
-            // bool p2Result = _tracker.IsInCooldown("P2");
+            bool p1Result = tracker.IsInCooldown("P1");
+            bool p2Result = tracker.IsInCooldown("P2");
 
             // Assert
-            // Assert.IsFalse(p1Result, "舊 parent 應該被新紀錄覆蓋");
-            // Assert.IsTrue(p2Result, "最新 parent 應該在冷卻期內");
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            Assert.IsFalse(p1Result, "舊 parent 應該被新紀錄覆蓋");
+            Assert.IsTrue(p2Result, "最新 parent 應該在冷卻期內");
         }
 
         #endregion
@@ -89,34 +79,32 @@ namespace HikAGVWebAPITests.App_Start
         public void IsInCooldown_RecordCompletion後31秒查同parent_回傳false過期()
         {
             // Arrange
-            // 建議：CooldownTracker 接受 Func<DateTime> nowProvider 以便注入時間
-            // _tracker = new CooldownTracker(cooldownSeconds: 30, nowProvider: () => fakeNow);
-            // fakeNow = DateTime.Now;
-            // _tracker.RecordCompletion("P1");
-            // fakeNow = fakeNow.AddSeconds(31);
+            DateTime fakeNow = new DateTime(2026, 4, 21, 14, 32, 35);
+            var tracker = new CooldownTracker(cooldownSeconds: 30, nowProvider: () => fakeNow);
+            tracker.RecordCompletion("P1");
+            fakeNow = fakeNow.AddSeconds(31);
 
             // Act
-            // bool result = _tracker.IsInCooldown("P1");
+            bool result = tracker.IsInCooldown("P1");
 
             // Assert
-            // Assert.IsFalse(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker（需支援時間注入）");
+            Assert.IsFalse(result);
         }
 
         [TestMethod]
         public void IsInCooldown_RecordCompletion後29秒查同parent_回傳true未過期邊界()
         {
             // Arrange
-            // fakeNow = DateTime.Now;
-            // _tracker.RecordCompletion("P1");
-            // fakeNow = fakeNow.AddSeconds(29);
+            DateTime fakeNow = new DateTime(2026, 4, 21, 14, 32, 35);
+            var tracker = new CooldownTracker(cooldownSeconds: 30, nowProvider: () => fakeNow);
+            tracker.RecordCompletion("P1");
+            fakeNow = fakeNow.AddSeconds(29);
 
             // Act
-            // bool result = _tracker.IsInCooldown("P1");
+            bool result = tracker.IsInCooldown("P1");
 
             // Assert
-            // Assert.IsTrue(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker（需支援時間注入）");
+            Assert.IsTrue(result);
         }
 
         #endregion
@@ -127,28 +115,28 @@ namespace HikAGVWebAPITests.App_Start
         public void RecordCompletion_parent為null_不記錄()
         {
             // Arrange
-            // _tracker.RecordCompletion(null);
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
+            tracker.RecordCompletion(null);
 
             // Act
-            // bool result = _tracker.IsInCooldown("P1");
+            bool result = tracker.IsInCooldown("P1");
 
             // Assert
-            // Assert.IsFalse(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            Assert.IsFalse(result);
         }
 
         [TestMethod]
         public void RecordCompletion_parent為空字串_不記錄()
         {
             // Arrange
-            // _tracker.RecordCompletion(string.Empty);
+            var tracker = new CooldownTracker(cooldownSeconds: 30);
+            tracker.RecordCompletion(string.Empty);
 
-            // Act
-            // bool result = _tracker.IsInCooldown("");
+            // Act - 以空字串查（理論上不會被 RecordCompletion 寫入）
+            bool result = tracker.IsInCooldown("");
 
-            // Assert
-            // Assert.IsFalse(result);
-            Assert.Inconclusive("待 Task 3 實作 CooldownTracker");
+            // Assert - 空字串 parent 由 IsInCooldown 直接擋掉也回傳 false
+            Assert.IsFalse(result);
         }
 
         #endregion
