@@ -58,6 +58,44 @@ namespace HikAGVWebAPI.App_Start
             _hikAGV = hikAGV;
             _pathCalculator = new ElevatorPathCalculator(elevatorSettings);
             _cooldownTracker = new CooldownTracker(crossFloorCooldownSeconds);
+
+            RebuildCooldownFromHistory(crossFloorCooldownSeconds);
+        }
+
+        /// <summary>
+        /// 啟動時從 ubMission 撈最近完成的 CROSS_FLOOR_DISPATCH，重建冷卻期狀態。
+        /// 保護情境：ACC 剛啟動（或剛重啟），記憶體冷卻狀態為空，
+        /// 若上次預調度才剛完成 &lt; cooldownSeconds，重派攔截將失效，改由本方法復原。
+        /// 失敗處理：任何例外只記 WARN，不中斷建構子。
+        /// </summary>
+        private void RebuildCooldownFromHistory(int lookbackSeconds)
+        {
+            if (_mDB == null) return;
+
+            try
+            {
+                oMissionModel recent = _mDB.Select_RecentCrossFloorDispatchCompletion(_shuttleId, lookbackSeconds);
+                if (recent == null) return;
+
+                if (string.IsNullOrEmpty(recent.ParentTaskDateTime) || string.IsNullOrEmpty(recent.EndTime))
+                    return;
+
+                if (!DateTime.TryParseExact(recent.EndTime, "yyyyMMddHHmmssffffff",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out DateTime endTime))
+                {
+                    _mLog?.TraceOut($"[CrossFloor] RebuildCooldown：EndTime 格式無法解析（{recent.EndTime}），略過", Log.LogType.NONE);
+                    return;
+                }
+
+                _cooldownTracker.Initialize(recent.ParentTaskDateTime, endTime);
+                _mLog?.TraceOut($"[CrossFloor] RebuildCooldown 成功：parent={recent.ParentTaskDateTime}, endTime={recent.EndTime}", Log.LogType.NONE);
+            }
+            catch (Exception ex)
+            {
+                _mLog?.TraceOut($"[CrossFloor] RebuildCooldown 失敗（不影響啟動）：{ex.Message}", Log.LogType.NONE);
+            }
         }
 
         /// <summary>

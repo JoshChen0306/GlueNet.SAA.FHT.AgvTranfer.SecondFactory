@@ -108,6 +108,27 @@ namespace HikAGVWebAPI.App_Start
             string sJson = JsonConvert.SerializeObject(dt);
             return JsonConvert.DeserializeObject<List<oTaskTypeRouteModel>>(sJson);
         }
+
+        /// <summary>
+        /// 查詢 ubMission 中最近 lookbackSeconds 秒內完成的 CROSS_FLOOR_DISPATCH（供 CrossFloorManager 啟動時重建冷卻狀態）
+        /// 篩選：TaskSource = CROSS_FLOOR_DISPATCH AND ShuttleId = 指定車 AND OkFlag in ('Y','C') AND ParentTaskDateTime 非空 AND EndTime 於 lookback 區間內
+        /// 回傳：EndTime 最新的一筆；無相符則回傳 null
+        /// </summary>
+        public oMissionModel Select_RecentCrossFloorDispatchCompletion(string shuttleId, int lookbackSeconds)
+        {
+            string cutoff = DateTime.Now.AddSeconds(-lookbackSeconds).ToString("yyyyMMddHHmmssffffff");
+            string sSQL = $@"select top 1 *
+                               from ubMission
+                              where TaskSource = 'CROSS_FLOOR_DISPATCH'
+                                and ShuttleId = '{shuttleId}'
+                                and OkFlag in ('Y', 'C')
+                                and ParentTaskDateTime is not null
+                                and EndTime >= '{cutoff}'
+                              order by EndTime desc";
+            DataTable dt = mSql.QuerySqlByAutoOpen(sSQL).Tables[0];
+            string sJson = JsonConvert.SerializeObject(dt);
+            return (JsonConvert.DeserializeObject<List<oMissionModel>>(sJson)).FirstOrDefault();
+        }
         #endregion 搜尋類
 
         #region 更新類
