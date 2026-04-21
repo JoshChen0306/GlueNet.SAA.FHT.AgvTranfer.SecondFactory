@@ -94,6 +94,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App_Start\CooldownTracker.cs" />
+    <Compile Include="App_Start\CrossFloorDecision.cs" />
     <Compile Include="App_Start\CrossFloorManager.cs" />
     <Compile Include="App_Start\Dispatch.cs" />
     <Compile Include="App_Start\ElevatorPathCalculator.cs" />

@@ -70,6 +70,10 @@
       <Project>{1853D499-7CE7-4B4C-8F23-4BBDBA5BA450}</Project>
       <Name>HikAGVWebAPI</Name>
     </ProjectReference>
+    <ProjectReference Include="..\HikAGV\HikAGV.csproj">
+      <Project>{D78C97A8-C186-4D70-A834-B3812CADD647}</Project>
+      <Name>HikAGV</Name>
+    </ProjectReference>
   </ItemGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '10.0' And '$(IsCodedUITest)' == 'True'">

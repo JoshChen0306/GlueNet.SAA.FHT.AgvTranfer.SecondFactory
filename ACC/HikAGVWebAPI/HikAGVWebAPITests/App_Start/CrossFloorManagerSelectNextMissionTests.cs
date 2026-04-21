@@ -1,89 +1,127 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using HikAGVWebAPI;
+using HikAGVWebAPI.App_Start;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace HikAGVWebAPITests.App_Start
 {
     /// <summary>
     /// SelectNextMission 整合冷卻期檢查的單元測試（對應工作計畫 Task 4）
-    /// 測試對象：CrossFloorManager.SelectNextMission / OnCrossFloorDispatchCompleted
-    ///
-    /// 實作建議：
-    ///   - 若採用純類別 CooldownTracker（Task 3）則可直接以 SpyTracker 注入驗證
-    ///   - 若需 mock SQLData/Log，需在 csproj 加入 Moq 套件並重構 CrossFloorManager 的依賴介面
+    /// 測試策略：
+    ///   - Tests 1~3：測試純決策函數 CrossFloorManager.DecideNextCrossFloorAction
+    ///     （已抽出為 internal static，不依賴 SQLData/HikAGV/Log）
+    ///   - Tests 4~5：測試 OnCrossFloorDispatchCompleted(mission) 是否正確驅動 CooldownTracker
+    ///     以 CrossFloorManager 實體 + 預設空 ElevatorSettings 建構
     /// </summary>
     [TestClass]
     public class CrossFloorManagerSelectNextMissionTests
     {
+        private ElevatorPathCalculator _pathCalculator;
+
         [TestInitialize]
         public void Setup()
         {
-            // TODO: 建立 CrossFloorManager 測試實例（含 stub SQLData / Log，或抽介面後用 Moq）
+            _pathCalculator = new ElevatorPathCalculator(new ElevatorSettings());
         }
 
-        #region Happy Path
+        #region Happy Path — 決策函數行為
 
         [TestMethod]
-        public void SelectNextMission_冷卻期命中且需派預調度_回傳父任務而非派預調度()
+        public void Decide_冷卻期命中且需派預調度_回傳CooldownHit並帶父任務()
         {
             // Arrange
-            // 1. RecordCompletion(parent="P1")
-            // 2. crossFloorPending = [MCS(TaskDateTime="P1", BeginStation=別樓層)]
-            // 3. oShuttle.MapCode = 車與 P1.BeginStation 不同樓層（誘發預調度判斷）
+            var cooldown = new CooldownTracker(cooldownSeconds: 30);
+            cooldown.RecordCompletion("PARENT_A");
+
+            // 父任務起點 W1（3F 客貨梯等待點，視為 3F）；車在 1F → 需要預調度
+            var parentTask = new oMissionModel
+            {
+                TaskDateTime = "PARENT_A",
+                BeginStation = "I1",
+                EndStation = "I2",
+                TaskSource = "MCS",
+            };
+            var pending = new List<oMissionModel> { parentTask };
 
             // Act
-            // var result = _manager.SelectNextMission(crossFloorPending);
+            var decision = CrossFloorManager.DecideNextCrossFloorAction(
+                pending, currentFloor: "1F", _pathCalculator, cooldown);
 
             // Assert
-            // - result 應為 triggerTask（父任務 P1），而非新建的 CROSS_FLOOR_DISPATCH
-            // - DispatchCrossFloor 不應被呼叫（驗證 mock / spy 的 Insert_oMission 未觸發）
-            Assert.Inconclusive("待 Task 4 實作 SelectNextMission 冷卻期整合");
-        }
-
-        [TestMethod]
-        public void SelectNextMission_冷卻期未命中且需派預調度_正常呼叫DispatchCrossFloor()
-        {
-            // Arrange
-            // 1. 無 RecordCompletion
-            // 2. crossFloorPending = [MCS(TaskDateTime="P1", BeginStation=別樓層)]
-
-            // Act
-            // var result = _manager.SelectNextMission(crossFloorPending);
-
-            // Assert
-            // - result 應為新的 CROSS_FLOOR_DISPATCH mission
-            // - 驗證 Insert_oMission 被呼叫一次
-            Assert.Inconclusive("待 Task 4 實作 SelectNextMission 冷卻期整合");
+            Assert.AreEqual(CrossFloorDecisionKind.CooldownHit, decision.Kind);
+            Assert.AreSame(parentTask, decision.Task, "冷卻期命中應回傳 triggerTask (父任務) 而非新建預調度");
         }
 
         [TestMethod]
-        public void SelectNextMission_不同parent不受冷卻期影響_照常派預調度()
+        public void Decide_冷卻期未命中且需派預調度_回傳NeedDispatch()
         {
             // Arrange
-            // 1. RecordCompletion(parent="P1")
-            // 2. crossFloorPending = [MCS(TaskDateTime="P2", BeginStation=別樓層)]
+            var cooldown = new CooldownTracker(cooldownSeconds: 30);
+            // 無 RecordCompletion → 冷卻期未命中
+
+            var parentTask = new oMissionModel
+            {
+                TaskDateTime = "PARENT_B",
+                BeginStation = "I1",
+                EndStation = "I2",
+                TaskSource = "MCS",
+            };
+            var pending = new List<oMissionModel> { parentTask };
 
             // Act
-            // var result = _manager.SelectNextMission(crossFloorPending);
+            var decision = CrossFloorManager.DecideNextCrossFloorAction(
+                pending, currentFloor: "1F", _pathCalculator, cooldown);
 
             // Assert
-            // - result 應為新的 CROSS_FLOOR_DISPATCH mission
-            // - 驗證 Insert_oMission 被呼叫一次
-            Assert.Inconclusive("待 Task 4 實作 SelectNextMission 冷卻期整合");
+            Assert.AreEqual(CrossFloorDecisionKind.NeedDispatch, decision.Kind);
+            Assert.AreSame(parentTask, decision.Task);
+            Assert.AreEqual("1F", decision.FromFloor);
+            Assert.AreEqual("3F", decision.ToFloor);
+        }
+
+        [TestMethod]
+        public void Decide_不同parent不受冷卻期影響_照常派預調度()
+        {
+            // Arrange
+            var cooldown = new CooldownTracker(cooldownSeconds: 30);
+            cooldown.RecordCompletion("PARENT_A");
+
+            // triggerTask 的 TaskDateTime 與冷卻期儲存的 parent 不同
+            var triggerTask = new oMissionModel
+            {
+                TaskDateTime = "PARENT_DIFFERENT",
+                BeginStation = "I1",
+                EndStation = "I2",
+                TaskSource = "MCS",
+            };
+            var pending = new List<oMissionModel> { triggerTask };
+
+            // Act
+            var decision = CrossFloorManager.DecideNextCrossFloorAction(
+                pending, currentFloor: "1F", _pathCalculator, cooldown);
+
+            // Assert
+            Assert.AreEqual(CrossFloorDecisionKind.NeedDispatch, decision.Kind,
+                "不同 parent 不受冷卻期影響，應回傳 NeedDispatch 正常派預調度");
         }
 
         [TestMethod]
         public void OnCrossFloorDispatchCompleted_mission帶ParentTaskDateTime_記錄進冷卻期()
         {
             // Arrange
-            // var mission = new oMissionModel { TaskSource = "CROSS_FLOOR_DISPATCH", ParentTaskDateTime = "P1" };
+            var manager = CreateTestManager();
+            var mission = new oMissionModel
+            {
+                TaskSource = CrossFloorManager.CROSS_FLOOR_DISPATCH,
+                ParentTaskDateTime = "PARENT_RECORD",
+            };
 
             // Act
-            // _manager.OnCrossFloorDispatchCompleted(mission);
+            manager.OnCrossFloorDispatchCompleted(mission);
 
             // Assert
-            // - 冷卻期內查 P1 應回傳 true
-            Assert.Inconclusive("待 Task 4 實作 OnCrossFloorDispatchCompleted 記錄 parent");
+            Assert.IsTrue(manager.CooldownTracker.IsInCooldown("PARENT_RECORD"),
+                "預調度完成 + 帶 ParentTaskDateTime → CooldownTracker 應記錄該 parent");
         }
 
         #endregion
@@ -94,16 +132,40 @@ namespace HikAGVWebAPITests.App_Start
         public void OnCrossFloorDispatchCompleted_mission無ParentTaskDateTime_不記錄()
         {
             // Arrange
-            // var mission = new oMissionModel { TaskSource = "CROSS_FLOOR_DISPATCH", ParentTaskDateTime = null };
+            var manager = CreateTestManager();
+            var mission = new oMissionModel
+            {
+                TaskSource = CrossFloorManager.CROSS_FLOOR_DISPATCH,
+                ParentTaskDateTime = null,
+            };
 
             // Act
-            // _manager.OnCrossFloorDispatchCompleted(mission);
+            manager.OnCrossFloorDispatchCompleted(mission);
 
             // Assert
-            // - 冷卻期內查任何 parent 應回傳 false
-            Assert.Inconclusive("待 Task 4 實作 OnCrossFloorDispatchCompleted 記錄 parent");
+            Assert.IsFalse(manager.CooldownTracker.IsInCooldown("PARENT_ANY"),
+                "ParentTaskDateTime 為 null → CooldownTracker 不應記錄任何 parent");
         }
 
         #endregion
+
+        // ─── Helpers ──────────────────────────────────────────────
+
+        /// <summary>
+        /// 建立最小可用 CrossFloorManager，專門給「OnCrossFloorDispatchCompleted → CooldownTracker」
+        /// 這類不涉及 SQL/HikAGV 的路徑使用。若呼叫到 _mDB / _hikAGV 會 NRE。
+        /// </summary>
+        private CrossFloorManager CreateTestManager()
+        {
+            return new CrossFloorManager(
+                shuttleId: "3",
+                idleReturnTimeoutSeconds: 60,
+                idleReturnFloor: "1F",
+                mapCodeFloorMapping: "AA:1F,BB:2F,DD:3F,FF:4F",
+                mDB: null,
+                mLog: new Log(),
+                hikAGV: null,
+                elevatorSettings: new ElevatorSettings());
+        }
     }
 }

@@ -28,6 +28,9 @@ namespace HikAGVWebAPI.App_Start
         private bool _idleReturnDispatched;         // 歸位任務已寫入 oMission（待 Dispatch 派發）
         private bool _crossFloorDispatchPending;    // 預調度任務已寫入 oMission（待 Dispatch 派發）
 
+        // ─── 冷卻期（C 方案：防止 MapCode 被覆蓋後重派同一 parent 預調度）───
+        private readonly CooldownTracker _cooldownTracker;
+
         // ─── 任務名稱常數 ─────────────────────────────────────────
         public const string IDLE_RETURN = "IDLE_RETURN";
         public const string CROSS_FLOOR_DISPATCH = "CROSS_FLOOR_DISPATCH";
@@ -40,7 +43,8 @@ namespace HikAGVWebAPI.App_Start
             SQLData mDB,
             Log mLog,
             HikAGV hikAGV,
-            ElevatorSettings elevatorSettings)
+            ElevatorSettings elevatorSettings,
+            int crossFloorCooldownSeconds = 30)
         {
             _shuttleId = shuttleId;
             _idleReturnTimeoutSeconds = idleReturnTimeoutSeconds;
@@ -53,7 +57,14 @@ namespace HikAGVWebAPI.App_Start
             _mLog = mLog;
             _hikAGV = hikAGV;
             _pathCalculator = new ElevatorPathCalculator(elevatorSettings);
+            _cooldownTracker = new CooldownTracker(crossFloorCooldownSeconds);
         }
+
+        /// <summary>
+        /// 測試用存取點（read-only）：讓單元測試驗證 RecordCompletion 是否被正確觸發。
+        /// 生產程式請勿透過此屬性改動冷卻期狀態。
+        /// </summary>
+        public CooldownTracker CooldownTracker => _cooldownTracker;
 
         /// <summary>
         /// 每個 Dispatch 主循環週期呼叫一次
@@ -169,12 +180,23 @@ namespace HikAGVWebAPI.App_Start
         }
 
         /// <summary>
-        /// 預調度任務完成時呼叫，重置預調度狀態
+        /// 預調度任務完成時呼叫，重置預調度狀態 + 記錄冷卻期
         /// </summary>
-        public void OnCrossFloorDispatchCompleted()
+        /// <param name="mission">
+        /// 完成的預調度 oMission。若帶有 ParentTaskDateTime，記錄至 CooldownTracker，
+        /// 避免 MapCode 於 UpdateAGVStatus 輪詢中被覆蓋後 SelectNextMission 重派同一 parent。
+        /// 為向後相容允許 null（舊呼叫端未遷移時僅重置 pending 旗標）。
+        /// </summary>
+        public void OnCrossFloorDispatchCompleted(oMissionModel mission = null)
         {
-            _mLog.TraceOut($"[CrossFloor] 預調度任務完成，重置狀態", Log.LogType.NONE);
+            _mLog?.TraceOut($"[CrossFloor] 預調度任務完成，重置狀態", Log.LogType.NONE);
             _crossFloorDispatchPending = false;
+
+            if (!string.IsNullOrEmpty(mission?.ParentTaskDateTime))
+            {
+                _cooldownTracker.RecordCompletion(mission.ParentTaskDateTime);
+                _mLog?.TraceOut($"[CrossFloor] 記錄冷卻期 parent={mission.ParentTaskDateTime}，30 秒內攔截同 parent 預調度重派", Log.LogType.NONE);
+            }
         }
 
         /// <summary>
@@ -219,43 +241,74 @@ namespace HikAGVWebAPI.App_Start
                 if (_crossFloorDispatchPending)
                     return null;
 
-                // 一般跨樓層任務，依建立時間排序
-                var normalTasks = crossFloorPending
-                    .Where(m => m.TaskSource != IDLE_RETURN && m.TaskSource != CROSS_FLOOR_DISPATCH)
-                    .OrderBy(m => m.TaskDateTime)
-                    .ToList();
-
-                if (!normalTasks.Any())
-                    return null;
-
                 oShuttleModel shuttle = GetShuttleStatus();
                 if (shuttle == null) return null;
 
                 string currentFloor = GetFloorByMapCode(shuttle.MapCode);
 
-                // 起點與車輛同樓層的任務優先派發
-                var sameFloorTask = normalTasks.FirstOrDefault(m =>
-                    _pathCalculator.GetFloor(m.BeginStation) == currentFloor);
-
-                if (sameFloorTask != null)
+                var decision = DecideNextCrossFloorAction(crossFloorPending, currentFloor, _pathCalculator, _cooldownTracker);
+                switch (decision.Kind)
                 {
-                    _mLog.TraceOut($"[CrossFloor] 同樓層任務優先派發：{sameFloorTask.BeginStation}→{sameFloorTask.EndStation}", Log.LogType.NONE);
-                    return sameFloorTask;
+                    case CrossFloorDecisionKind.None:
+                        return null;
+                    case CrossFloorDecisionKind.SameFloor:
+                        _mLog.TraceOut($"[CrossFloor] 同樓層任務優先派發：{decision.Task.BeginStation}→{decision.Task.EndStation}", Log.LogType.NONE);
+                        return decision.Task;
+                    case CrossFloorDecisionKind.CooldownHit:
+                        _mLog.TraceOut($"[CrossFloor] 冷卻期命中，攔截預調度重派 parent={decision.Task.TaskDateTime}，回傳父任務讓 Dispatch 正常處理", Log.LogType.NONE);
+                        return decision.Task;
+                    case CrossFloorDecisionKind.NeedDispatch:
+                        return DispatchCrossFloor(decision.FromFloor, decision.ToFloor, decision.Task.TaskDateTime);
+                    default:
+                        return null;
                 }
-
-                // 無同樓層任務 → 產生預調度任務，將車移至最早任務的起點樓層
-                var triggerTask = normalTasks.First();
-                string targetFloor = _pathCalculator.GetFloor(triggerTask.BeginStation);
-                if (string.IsNullOrEmpty(currentFloor) || string.IsNullOrEmpty(targetFloor))
-                    return null;
-
-                return DispatchCrossFloor(currentFloor, targetFloor, triggerTask.TaskDateTime);
             }
             catch (Exception ex)
             {
                 _mLog.TraceOut($"[CrossFloor] SelectNextMission Exception: {ex.Message}", Log.LogType.NONE);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 純決策函數（無 side effect）：給定待派清單與車輛所在樓層，決定下一步動作。
+        /// 獨立抽出以利單元測試（不依賴 SQLData / Log / HikAGV）。
+        /// </summary>
+        public static CrossFloorDecision DecideNextCrossFloorAction(
+            List<oMissionModel> crossFloorPending,
+            string currentFloor,
+            ElevatorPathCalculator pathCalculator,
+            CooldownTracker cooldownTracker)
+        {
+            if (crossFloorPending == null || pathCalculator == null)
+                return CrossFloorDecision.None();
+
+            var normalTasks = crossFloorPending
+                .Where(m => m != null && m.TaskSource != IDLE_RETURN && m.TaskSource != CROSS_FLOOR_DISPATCH)
+                .OrderBy(m => m.TaskDateTime)
+                .ToList();
+
+            if (!normalTasks.Any())
+                return CrossFloorDecision.None();
+
+            // 起點與車輛同樓層的任務優先派發（不受冷卻期影響）
+            var sameFloorTask = normalTasks.FirstOrDefault(m =>
+                pathCalculator.GetFloor(m.BeginStation) == currentFloor);
+
+            if (sameFloorTask != null)
+                return CrossFloorDecision.SameFloor(sameFloorTask);
+
+            // 無同樓層任務 → 需預調度，將車移至最早任務的起點樓層
+            var triggerTask = normalTasks.First();
+            string targetFloor = pathCalculator.GetFloor(triggerTask.BeginStation);
+            if (string.IsNullOrEmpty(currentFloor) || string.IsNullOrEmpty(targetFloor))
+                return CrossFloorDecision.None();
+
+            // 冷卻期命中 → 攔截預調度重派，回傳父任務
+            if (cooldownTracker != null && cooldownTracker.IsInCooldown(triggerTask.TaskDateTime))
+                return CrossFloorDecision.CooldownHit(triggerTask);
+
+            return CrossFloorDecision.NeedDispatch(triggerTask, currentFloor, targetFloor);
         }
 
         // ─── 私有方法 ─────────────────────────────────────────────

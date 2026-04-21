@@ -84,7 +84,7 @@ namespace HikAGVWebAPI
                             else if (oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
                             {
                                 mLog.TraceOut($"[CrossFloor] 預調度任務 Callback end，通知 CrossFloorManager 完成", Log.LogType.NONE);
-                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted();
+                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted(oMission);
                             }
                             mLog.TraceOut($"AGV End Finish!", Log.LogType.NONE);
                             break;
@@ -98,7 +98,7 @@ namespace HikAGVWebAPI
                             else if (oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH)
                             {
                                 mLog.TraceOut($"[CrossFloor] 預調度任務 Callback cancel，通知 CrossFloorManager 重置", Log.LogType.NONE);
-                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted();
+                                Dispatch.CrossFloor?.OnCrossFloorDispatchCompleted(oMission);
                             }
 
                             if ((oMission?.TaskSource == CrossFloorManager.CROSS_FLOOR_DISPATCH
