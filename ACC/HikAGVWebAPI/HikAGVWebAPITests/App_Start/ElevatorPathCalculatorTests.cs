@@ -894,6 +894,36 @@ namespace HikAGVWebAPITests.App_Start
             CollectionAssert.AreEqual(expected, path);
         }
 
+        [TestMethod]
+        public void BuildReturnPath_單電梯_1F到2F_應走客梯等待點()
+        {
+            // Arrange
+            string fromFloor = "1F";
+            string toFloor = "2F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 1F→2F 僅走客梯，終點應為客梯 2F 等待點 V1
+            var expected = new List<string> { "U1", "U2", "V2", "V1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_2F到1F_應走客梯等待點()
+        {
+            // Arrange
+            string fromFloor = "2F";
+            string toFloor = "1F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 2F→1F 僅走客梯，終點應為客梯 1F 等待點 U1
+            var expected = new List<string> { "V1", "V2", "U2", "U1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
         #endregion
     }
 }
