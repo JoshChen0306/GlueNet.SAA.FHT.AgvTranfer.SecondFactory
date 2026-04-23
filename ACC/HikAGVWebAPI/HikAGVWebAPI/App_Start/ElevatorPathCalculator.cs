@@ -140,10 +140,10 @@ namespace HikAGVWebAPI
         {
             var beginFloor = GetFloor(beginStation);
             var endFloor = GetFloor(endStation);
-            
+
             if (beginFloor == null || endFloor == null)
                 return false;
-                
+
             return beginFloor != endFloor;
         }
 
@@ -281,11 +281,18 @@ namespace HikAGVWebAPI
                 AddElevatorPath(path, fromFloor, toFloor, isGoingUp, isCustomer: true);
             }
 
-            // 加上目標樓層等待點作為路徑終點
-            if (_freightWaitPoints.ContainsKey(toFloor))
-                path.Add(_freightWaitPoints[toFloor]);
-            else if (_customerWaitPoints.ContainsKey(toFloor))
+            if (path.Count == 3 && (fromFloor == "1F" || fromFloor == "2F"))
+            {
                 path.Add(_customerWaitPoints[toFloor]);
+            }
+            else
+            {
+                // 加上目標樓層等待點作為路徑終點
+                if (_freightWaitPoints.ContainsKey(toFloor))
+                    path.Add(_freightWaitPoints[toFloor]);
+                else if (_customerWaitPoints.ContainsKey(toFloor))
+                    path.Add(_customerWaitPoints[toFloor]);
+            }
 
             return path.Count > 0 ? path : null;
         }

@@ -833,6 +833,67 @@ namespace HikAGVWebAPITests.App_Start
             CollectionAssert.AreEqual(expected, path);
         }
 
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_1F到3F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "1F";
+            string toFloor = "3F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "U1", "U2", "W2", "W1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_3F到1F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "3F";
+            string toFloor = "1F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "W1", "W2", "U2", "U1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_2F到3F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "2F";
+            string toFloor = "3F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "V1", "V2", "W2", "W1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
+        [TestMethod]
+        public void BuildReturnPath_單電梯_3F到2F_不受影響()
+        {
+            // Arrange
+            string fromFloor = "3F";
+            string toFloor = "2F";
+
+            // Act
+            var path = _calculator.BuildReturnPath(fromFloor, toFloor);
+
+            // Assert — 單電梯不經過換乘，維持原路徑
+            var expected = new List<string> { "W1", "W2", "V2", "V1" };
+            CollectionAssert.AreEqual(expected, path);
+        }
+
         #endregion
     }
 }
