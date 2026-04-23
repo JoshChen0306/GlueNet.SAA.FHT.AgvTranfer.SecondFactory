@@ -281,13 +281,15 @@ namespace HikAGVWebAPI
                 AddElevatorPath(path, fromFloor, toFloor, isGoingUp, isCustomer: true);
             }
 
-            if (path.Count == 3 && (fromFloor == "1F" || fromFloor == "2F"))
+            // 加上目標樓層等待點作為路徑終點
+            // 單客梯路徑（1F/2F ↔ 3F、1F ↔ 2F）必須收在客梯等待點，避免被 freight 優先規則誤派到客貨梯等待點
+            if (needCustomer && !needFreight)
             {
-                path.Add(_customerWaitPoints[toFloor]);
+                if (_customerWaitPoints.ContainsKey(toFloor))
+                    path.Add(_customerWaitPoints[toFloor]);
             }
             else
             {
-                // 加上目標樓層等待點作為路徑終點
                 if (_freightWaitPoints.ContainsKey(toFloor))
                     path.Add(_freightWaitPoints[toFloor]);
                 else if (_customerWaitPoints.ContainsKey(toFloor))
