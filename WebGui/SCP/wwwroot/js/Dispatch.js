@@ -1131,6 +1131,13 @@ $(function () {
         }
         $("#lotFormSection").addClass("d-none");
 
+        // 依設定決定是否隱藏「貨架條碼」欄位（隱藏時送出固定帶 -1）
+        if (window.showRackIdField === false) {
+            $("#lotRackIdRow").hide();
+        } else {
+            $("#lotRackIdRow").show();
+        }
+
         // 動態生成按鈕
         var footer = $("#stationLotFooter");
         footer.html('<button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">關閉</button>');
@@ -1351,6 +1358,11 @@ $(function () {
         var workOrder = $("#registerLotWorkOrder").val().trim();
         var rackId = $("#registerLotRackId").val().trim();
         var isVcutMaterial = $("#registerLotVcut").is(":checked");
+
+        // 貨架條碼欄位隱藏時，固定帶 -1 哨兵值（代表無貨架，通過後端必填驗證，AGV 端認得 -1）
+        if (window.showRackIdField === false) {
+            rackId = "-1";
+        }
 
         // 驗證：工單必填（R 區例外，工單選填）
         var stationArea = currentLotStation.substring(0, 1).toUpperCase();

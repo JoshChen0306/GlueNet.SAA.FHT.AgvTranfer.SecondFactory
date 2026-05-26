@@ -131,6 +131,9 @@ namespace SCP.Controllers
             // 傳遞路線 ID 清單（用於前端權限過濾，如 V Cut 物料權限）
             ViewBag.UserRouteIds = userRoutes.Select(r => r.RouteId).ToList();
 
+            // 物料登記畫面是否顯示「貨架條碼」欄位（預設 true 顯示；關閉時前端隱藏欄位、送出固定帶 -1 哨兵值通過後端必填驗證）
+            ViewBag.ShowRackIdField = _configuration.GetValue("MyConfig:ShowRackIdField", true);
+
             return View();
         }
 

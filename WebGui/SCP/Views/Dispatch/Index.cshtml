@@ -323,7 +323,7 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="mb-3">
+                        <div class="mb-3" id="lotRackIdRow">
                             <label class="form-label">貨架條碼</label>
                             <div class="input-group">
                                 <input type="text" class="form-control" id="registerLotRackId" placeholder="貨架條碼 (RackId)" />
@@ -380,6 +380,8 @@
             window.userRouteIds = @Html.Raw(Json.Serialize(ViewBag.UserRouteIds));
             // 使用者預設樓層（自動選擇第一個可用的樓層）
             window.defaultFloor = "@ViewBag.DefaultFloor";
+            // 物料登記畫面是否顯示「貨架條碼」欄位（false 時前端隱藏欄位，送出固定帶 -1）
+            window.showRackIdField = @(((bool?)ViewBag.ShowRackIdField ?? true) ? "true" : "false");
         </script>
         <script src="~/lib/html5-qrcode/html5-qrcode.min.js"></script>
         <script type="module" src="~/js/Map.js"></script>
