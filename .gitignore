@@ -342,3 +342,6 @@ ASALocalRun/
 /WebGui/SCP/obj/Debug/net6.0/SCP.dll
 /WebGui/SCP/obj/Debug/net6.0/SCP.pdb
 /WebGui/SCP/obj/Debug/net6.0/staticwebassets.build.json
+
+# Claude Code 本機設定
+.claude/
