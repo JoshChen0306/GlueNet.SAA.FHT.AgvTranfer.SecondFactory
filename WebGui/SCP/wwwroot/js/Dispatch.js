@@ -508,6 +508,11 @@ $(function () {
             $("#WorkOrder").prop("disabled", false);
         }
 
+        // 2F 站內運輸：終點站只能透過掃描機台 / 手動輸入設定，禁止從下拉選單選擇
+        if (currentFloor === "2F - 站內運輸") {
+            $("#EndStation").prop("disabled", true);
+        }
+
         // 從快取讀取 RackId
         if (selectedStation && selectedStation.rackId) {
             $('#RackId').val(selectedStation.rackId);
