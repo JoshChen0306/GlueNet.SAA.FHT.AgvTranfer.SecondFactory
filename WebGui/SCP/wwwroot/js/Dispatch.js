@@ -1172,7 +1172,10 @@ $(function () {
                     footer.prepend('<button type="button" class="btn btn-warning rounded-pill me-2" id="btnMarkEmptyTray">📦 標記空板</button>');
                 } else if (stationInfo.haveFlag === "1") {
                     // 空板 - 可 Release 回送
-                    footer.prepend('<button type="button" class="btn btn-success rounded-pill me-2" id="btnRelease">🚚 Release 回送</button>');
+                    // O/P 區已有 oPortBinding 自動回收空板機制，不顯示 Release 按鈕
+                    if (stationArea !== "O" && stationArea !== "P") {
+                        footer.prepend('<button type="button" class="btn btn-success rounded-pill me-2" id="btnRelease">🚚 Release 回送</button>');
+                    }
                 }
                 // HaveFlag=0 (空架) 時不顯示任何操作按鈕
             }
