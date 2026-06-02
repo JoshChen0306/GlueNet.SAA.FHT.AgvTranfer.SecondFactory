@@ -1,12 +1,12 @@
-using System;
+ï»¿using System;
 using System.Data;
 using System.Data.SqlClient;
 
 namespace svrPair.Database
 {
     /// <summary>
-    /// SQL Server ¸ê®Æ®w³s½u»²§UÃş§O
-    /// ¸Ñ¨M­ì MsSql Ãş§Oµw½s½X³s½u¦r¦êªº°İÃD
+    /// SQL Server è³‡æ–™åº«é€£ç·šè¼”åŠ©é¡åˆ¥
+    /// è§£æ±ºåŸ MsSql é¡åˆ¥ç¡¬ç·¨ç¢¼é€£ç·šå­—ä¸²çš„å•é¡Œ
     /// </summary>
     public class SqlHelper
     {
@@ -16,31 +16,31 @@ namespace svrPair.Database
         private const int MaxRetryCount = 2;
         private const int CommandTimeout = 1200;
 
-        #region [«Øºc¤l]
+        #region [å»ºæ§‹å­]
         
         /// <summary>
-        /// ¨Ï¥Î§¹¾ã³s½u¦r¦ê«Ø¥ß SqlHelper
+        /// ä½¿ç”¨å®Œæ•´é€£ç·šå­—ä¸²å»ºç«‹ SqlHelper
         /// </summary>
-        /// <param name="connectionString">§¹¾ãªº SQL Server ³s½u¦r¦ê</param>
+        /// <param name="connectionString">å®Œæ•´çš„ SQL Server é€£ç·šå­—ä¸²</param>
         public SqlHelper(string connectionString)
         {
             if (string.IsNullOrWhiteSpace(connectionString))
             {
-                throw new ArgumentException("³s½u¦r¦ê¤£¥i¬°ªÅ", nameof(connectionString));
+                throw new ArgumentException("é€£ç·šå­—ä¸²ä¸å¯ç‚ºç©º", nameof(connectionString));
             }
             
             _connectionString = connectionString;
         }
 
         /// <summary>
-        /// ¨Ï¥Î­Ó§O°Ñ¼Æ«Ø¥ß SqlHelper (¬Û®e©ó­ì MsSql Ãş§O)
+        /// ä½¿ç”¨å€‹åˆ¥åƒæ•¸å»ºç«‹ SqlHelper (ç›¸å®¹æ–¼åŸ MsSql é¡åˆ¥)
         /// </summary>
-        /// <param name="server">¦øªA¾¹¦ì¸m (¨Ò: DESKTOP-2I3FKA2\SQLEXPRESS)</param>
-        /// <param name="database">¸ê®Æ®w¦WºÙ</param>
-        /// <param name="userId">¨Ï¥ÎªÌ±b¸¹</param>
-        /// <param name="password">±K½X</param>
-        /// <param name="encrypt">¬O§_¥[±K³s½u</param>
-        /// <param name="trustServerCertificate">¬O§_«H¥ô¦øªA¾¹¾ÌÃÒ</param>
+        /// <param name="server">ä¼ºæœå™¨ä½ç½® (ä¾‹: DESKTOP-2I3FKA2\SQLEXPRESS)</param>
+        /// <param name="database">è³‡æ–™åº«åç¨±</param>
+        /// <param name="userId">ä½¿ç”¨è€…å¸³è™Ÿ</param>
+        /// <param name="password">å¯†ç¢¼</param>
+        /// <param name="encrypt">æ˜¯å¦åŠ å¯†é€£ç·š</param>
+        /// <param name="trustServerCertificate">æ˜¯å¦ä¿¡ä»»ä¼ºæœå™¨æ†‘è­‰</param>
         public SqlHelper(
             string server, 
             string database, 
@@ -51,12 +51,12 @@ namespace svrPair.Database
         {
             if (string.IsNullOrWhiteSpace(server))
             {
-                throw new ArgumentException("¦øªA¾¹¦ì¸m¤£¥i¬°ªÅ", nameof(server));
+                throw new ArgumentException("ä¼ºæœå™¨ä½ç½®ä¸å¯ç‚ºç©º", nameof(server));
             }
             
             if (string.IsNullOrWhiteSpace(database))
             {
-                throw new ArgumentException("¸ê®Æ®w¦WºÙ¤£¥i¬°ªÅ", nameof(database));
+                throw new ArgumentException("è³‡æ–™åº«åç¨±ä¸å¯ç‚ºç©º", nameof(database));
             }
 
             _connectionString = BuildConnectionString(
@@ -71,10 +71,10 @@ namespace svrPair.Database
 
         #endregion
 
-        #region [³s½u¦r¦ê«Ø¥ß]
+        #region [é€£ç·šå­—ä¸²å»ºç«‹]
 
         /// <summary>
-        /// «Ø¥ß SQL Server ³s½u¦r¦ê
+        /// å»ºç«‹ SQL Server é€£ç·šå­—ä¸²
         /// </summary>
         private static string BuildConnectionString(
             string server,
@@ -100,17 +100,17 @@ namespace svrPair.Database
 
         #endregion
 
-        #region [¼g¤J¾Ş§@ - ¬Û®e©ó­ì WriteSqlByAutoOpen]
+        #region [å¯«å…¥æ“ä½œ - ç›¸å®¹æ–¼åŸ WriteSqlByAutoOpen]
 
         /// <summary>
-        /// °õ¦æ SQL ¼g¤J«ü¥O (INSERT, UPDATE, DELETE)
+        /// åŸ·è¡Œ SQL å¯«å…¥æŒ‡ä»¤ (INSERT, UPDATE, DELETE)
         /// </summary>
-        /// <param name="sqlCommand">SQL «ü¥O</param>
+        /// <param name="sqlCommand">SQL æŒ‡ä»¤</param>
         public void WriteSqlByAutoOpen(string sqlCommand)
         {
             if (string.IsNullOrWhiteSpace(sqlCommand))
             {
-                throw new ArgumentException("SQL «ü¥O¤£¥i¬°ªÅ", nameof(sqlCommand));
+                throw new ArgumentException("SQL æŒ‡ä»¤ä¸å¯ç‚ºç©º", nameof(sqlCommand));
             }
 
             lock (_sqlWriteLock)
@@ -130,42 +130,42 @@ namespace svrPair.Database
                                 command.ExecuteNonQuery();
                             }
 
-                            return; // ¦¨¥\°õ¦æ,µ²§ô¤èªk
+                            return; // æˆåŠŸåŸ·è¡Œ,çµæŸæ–¹æ³•
                         }
                         catch (Exception ex)
                         {
                             lastException = ex;
                             
-                            // °O¿ı­«¸Õ¸ê°T (¥i¿ï)
+                            // è¨˜éŒ„é‡è©¦è³‡è¨Š (å¯é¸)
                             if (attempt < MaxRetryCount)
                             {
                                 System.Diagnostics.Debug.WriteLine(
-                                    $"SQL ¼g¤J¥¢±Ñ,²Ä {attempt} ¦¸­«¸Õ: {ex.Message}"
+                                    $"SQL å¯«å…¥å¤±æ•—,ç¬¬ {attempt} æ¬¡é‡è©¦: {ex.Message}"
                                 );
                             }
                         }
                     }
                 }
 
-                // ©Ò¦³­«¸Õ³£¥¢±Ñ
-                throw new Exception($"SQL ¼g¤J¾Ş§@¥¢±Ñ: {lastException?.Message}", lastException);
+                // æ‰€æœ‰é‡è©¦éƒ½å¤±æ•—
+                throw new Exception($"SQL å¯«å…¥æ“ä½œå¤±æ•—: {lastException?.Message}", lastException);
             }
         }
 
         #endregion
 
-        #region [¬d¸ß¾Ş§@ - ¬Û®e©ó­ì QuerySqlByAutoOpen]
+        #region [æŸ¥è©¢æ“ä½œ - ç›¸å®¹æ–¼åŸ QuerySqlByAutoOpen]
 
         /// <summary>
-        /// °õ¦æ SQL ¬d¸ß«ü¥O (SELECT)
+        /// åŸ·è¡Œ SQL æŸ¥è©¢æŒ‡ä»¤ (SELECT)
         /// </summary>
-        /// <param name="sqlQuery">SQL ¬d¸ß«ü¥O</param>
-        /// <returns>¥]§t¬d¸ßµ²ªGªº DataSet</returns>
+        /// <param name="sqlQuery">SQL æŸ¥è©¢æŒ‡ä»¤</param>
+        /// <returns>åŒ…å«æŸ¥è©¢çµæœçš„ DataSet</returns>
         public DataSet QuerySqlByAutoOpen(string sqlQuery)
         {
             if (string.IsNullOrWhiteSpace(sqlQuery))
             {
-                throw new ArgumentException("SQL ¬d¸ß¤£¥i¬°ªÅ", nameof(sqlQuery));
+                throw new ArgumentException("SQL æŸ¥è©¢ä¸å¯ç‚ºç©º", nameof(sqlQuery));
             }
 
             lock (_sqlReadLock)
@@ -194,30 +194,30 @@ namespace svrPair.Database
                         {
                             lastException = ex;
                             
-                            // °O¿ı­«¸Õ¸ê°T (¥i¿ï)
+                            // è¨˜éŒ„é‡è©¦è³‡è¨Š (å¯é¸)
                             if (attempt < MaxRetryCount)
                             {
                                 System.Diagnostics.Debug.WriteLine(
-                                    $"SQL ¬d¸ß¥¢±Ñ,²Ä {attempt} ¦¸­«¸Õ: {ex.Message}"
+                                    $"SQL æŸ¥è©¢å¤±æ•—,ç¬¬ {attempt} æ¬¡é‡è©¦: {ex.Message}"
                                 );
                             }
                         }
                     }
                 }
 
-                // ©Ò¦³­«¸Õ³£¥¢±Ñ
-                throw new Exception($"SQL ¬d¸ß¾Ş§@¥¢±Ñ: {lastException?.Message}", lastException);
+                // æ‰€æœ‰é‡è©¦éƒ½å¤±æ•—
+                throw new Exception($"SQL æŸ¥è©¢æ“ä½œå¤±æ•—: {lastException?.Message}", lastException);
             }
         }
 
         #endregion
 
-        #region [ÃB¥~¥\¯à¤èªk]
+        #region [é¡å¤–åŠŸèƒ½æ–¹æ³•]
 
         /// <summary>
-        /// ´ú¸Õ¸ê®Æ®w³s½u
+        /// æ¸¬è©¦è³‡æ–™åº«é€£ç·š
         /// </summary>
-        /// <returns>³s½u¬O§_¦¨¥\</returns>
+        /// <returns>é€£ç·šæ˜¯å¦æˆåŠŸ</returns>
         public bool TestConnection()
         {
             try
@@ -235,7 +235,7 @@ namespace svrPair.Database
         }
 
         /// <summary>
-        /// ¨ú±o¸ê®Æ®w³s½u¦r¦ê (ÁôÂÃ±K½X)
+        /// å–å¾—è³‡æ–™åº«é€£ç·šå­—ä¸² (éš±è—å¯†ç¢¼)
         /// </summary>
         public string GetConnectionStringMasked()
         {
