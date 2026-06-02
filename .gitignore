@@ -345,3 +345,6 @@ ASALocalRun/
 
 # Claude Code 本機設定
 .claude/
+
+# bash.exe crash dumps
+*.stackdump
