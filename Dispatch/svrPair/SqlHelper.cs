@@ -152,6 +152,59 @@ namespace svrPair.Database
             }
         }
 
+        /// <summary>
+        /// 執行參數化 SQL 寫入指令 (INSERT, UPDATE, DELETE)。
+        /// 以 SqlParameter 傳值，徹底避免特殊字元(單引號等)造成語法錯誤與 SQL injection。
+        /// </summary>
+        /// <param name="sqlCommand">含參數佔位符(@p)的 SQL 指令</param>
+        /// <param name="parameters">對應的 SqlParameter 陣列</param>
+        public void WriteSqlByAutoOpen(string sqlCommand, params SqlParameter[] parameters)
+        {
+            if (string.IsNullOrWhiteSpace(sqlCommand))
+            {
+                throw new ArgumentException("SQL 指令不可為空", nameof(sqlCommand));
+            }
+
+            lock (_sqlWriteLock)
+            {
+                Exception lastException = null;
+
+                for (int attempt = 1; attempt <= MaxRetryCount; attempt++)
+                {
+                    using (var connection = new SqlConnection(_connectionString))
+                    {
+                        try
+                        {
+                            connection.Open();
+
+                            using (var command = new SqlCommand(sqlCommand, connection))
+                            {
+                                AddParameters(command, parameters);
+                                command.ExecuteNonQuery();
+                            }
+
+                            return; // 成功執行,結束方法
+                        }
+                        catch (Exception ex)
+                        {
+                            lastException = ex;
+
+                            // 記錄重試資訊 (可選)
+                            if (attempt < MaxRetryCount)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"SQL 寫入失敗(參數化),第 {attempt} 次重試: {ex.Message}"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // 所有重試都失敗
+                throw new Exception($"SQL 寫入操作失敗: {lastException?.Message}", lastException);
+            }
+        }
+
         #endregion
 
         #region [查詢操作 - 相容於原 QuerySqlByAutoOpen]
@@ -207,6 +260,84 @@ namespace svrPair.Database
 
                 // 所有重試都失敗
                 throw new Exception($"SQL 查詢操作失敗: {lastException?.Message}", lastException);
+            }
+        }
+
+        /// <summary>
+        /// 執行參數化 SQL 查詢指令 (SELECT)。
+        /// 以 SqlParameter 傳值，徹底避免特殊字元(單引號等)造成語法錯誤與 SQL injection。
+        /// </summary>
+        /// <param name="sqlQuery">含參數佔位符(@p)的 SQL 查詢</param>
+        /// <param name="parameters">對應的 SqlParameter 陣列</param>
+        /// <returns>包含查詢結果的 DataSet</returns>
+        public DataSet QuerySqlByAutoOpen(string sqlQuery, params SqlParameter[] parameters)
+        {
+            if (string.IsNullOrWhiteSpace(sqlQuery))
+            {
+                throw new ArgumentException("SQL 查詢不可為空", nameof(sqlQuery));
+            }
+
+            lock (_sqlReadLock)
+            {
+                Exception lastException = null;
+
+                for (int attempt = 1; attempt <= MaxRetryCount; attempt++)
+                {
+                    using (var connection = new SqlConnection(_connectionString))
+                    {
+                        try
+                        {
+                            connection.Open();
+
+                            using (var command = new SqlCommand(sqlQuery, connection))
+                            {
+                                command.CommandTimeout = CommandTimeout;
+                                AddParameters(command, parameters);
+
+                                using (var adapter = new SqlDataAdapter(command))
+                                {
+                                    var dataSet = new DataSet();
+                                    adapter.Fill(dataSet);
+
+                                    return dataSet;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            lastException = ex;
+
+                            // 記錄重試資訊 (可選)
+                            if (attempt < MaxRetryCount)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"SQL 查詢失敗(參數化),第 {attempt} 次重試: {ex.Message}"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // 所有重試都失敗
+                throw new Exception($"SQL 查詢操作失敗: {lastException?.Message}", lastException);
+            }
+        }
+
+        #endregion
+
+        #region [參數化輔助]
+
+        /// <summary>
+        /// 將參數加入命令。每次都複製一份全新的 SqlParameter，避免同一物件被多個 SqlCommand
+        /// (重試會建立新 command) 共用而拋「already contained by another SqlParameterCollection」。
+        /// </summary>
+        private static void AddParameters(SqlCommand command, SqlParameter[] parameters)
+        {
+            if (parameters == null) return;
+            foreach (var p in parameters)
+            {
+                if (p == null) continue;
+                command.Parameters.Add((SqlParameter)((ICloneable)p).Clone());
             }
         }
 
