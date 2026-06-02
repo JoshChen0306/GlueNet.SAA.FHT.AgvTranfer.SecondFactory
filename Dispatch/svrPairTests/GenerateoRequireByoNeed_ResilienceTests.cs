@@ -54,9 +54,10 @@ namespace svrPair.Tests
             Assert.AreEqual("X", (flag ?? "").ToString().Trim(), "毒資料應被隔離標記為 X");
 
             // Assert ②：正常筆仍成功產生 oRequire（毒筆未拖垮整輪）
+            // 正常筆使用第二組站號 A93（避免與毒筆 A91 站號碰撞而被 UpdateoNeedAssignFlag 互相覆寫）。
             var cnt = (int)Scalar(
-                "SELECT COUNT(*) FROM oRequire WHERE ObjStation = @s AND TaskSource = @src",
-                P("@s", TEST_BGN), P("@src", UTEST_SOURCE));
+                "SELECT COUNT(*) FROM oRequire WHERE ObjStation = @s",
+                P("@s", TEST_BGN2));
             Assert.IsTrue(cnt >= 1, "毒筆之後的正常筆仍應被處理、產生 oRequire");
         }
 
@@ -95,15 +96,15 @@ namespace svrPair.Tests
             return t;
         }
 
-        /// <summary>正常筆：合法長度，應成功產生 oRequire。</summary>
+        /// <summary>正常筆：合法長度、使用第二組站號 A93→B94（與毒筆站號不碰撞），應成功產生 oRequire。</summary>
         private string SeedValidRow(int idx)
         {
             string t = MakeTaskDateTime(idx);
             ExecNonQuery(
                 "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime) " +
                 "VALUES(@obj, @rack, @wo, @end, @src, @t)",
-                P("@obj", TEST_BGN), P("@rack", "R001"), P("@wo", "UTESTWO"),
-                P("@end", TEST_END), P("@src", UTEST_SOURCE), P("@t", t));
+                P("@obj", TEST_BGN2), P("@rack", "R001"), P("@wo", "UTESTWO"),
+                P("@end", TEST_END2), P("@src", UTEST_SOURCE), P("@t", t));
             return t;
         }
 

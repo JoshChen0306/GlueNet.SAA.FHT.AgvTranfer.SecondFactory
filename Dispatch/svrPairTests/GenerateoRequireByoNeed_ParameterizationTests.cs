@@ -46,14 +46,17 @@ namespace svrPair.Tests
         [TestMethod]
         public void GenerateoRequireByoNeed_SqlInjectionString_NeutralisedAndTableSurvives()
         {
-            // Arrange — 典型注入字串
-            const string wo = "x');DROP TABLE oRequire;--";
+            // ⚠️ 安全鐵則：此測試在 T6 參數化「尚未」實作時會以紅燈失敗（屬預期），
+            //    但 payload 絕不可帶 ';' / DROP / DELETE / UPDATE 等可形成第二條語句的內容，
+            //    否則字串拼接版的 cPair 會真的執行破壞性語句（曾因 'x');DROP TABLE oRequire;--' 真的 drop 掉 oRequire）。
+            //    這裡採用「含單引號 + OR」的注入字串：拼接時只會造成語法錯誤（不執行），參數化後則原樣存入。
+            const string wo = "x' OR '1'='1";
             string t = SeedPairRow(idx: 1, workOrder: wo, rackId: "R002");
 
             // Act
             _cPair.GenerateoRequireByoNeed();
 
-            // Assert ①：原值被當純文字存入
+            // Assert ①：原值被當純文字存入（證明已中和、未被當 SQL 解釋）
             var stored = Scalar(
                 "SELECT WorkOrder FROM oRequire WHERE TaskDateTime = @t", P("@t", t));
             Assert.AreEqual(wo, (stored ?? "").ToString(), "注入字串應原樣存入、未被執行");

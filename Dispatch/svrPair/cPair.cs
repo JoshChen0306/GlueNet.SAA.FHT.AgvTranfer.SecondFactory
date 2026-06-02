@@ -104,38 +104,46 @@ namespace svrPair
             WriteLog("===============");
             while (mGo)
             {
-                //由平板產生了oNeed
-                GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 : 尋找oNeed中AssignFlag = NULL的資料，以此產出oRequire關聯資料，而後註冊oPort的起終註記、oNeed中AssignFlag是Y正常或E異常
-
-                GenerateoNeedDataByMCSAsBtoA(); //1-2 .主程序 == 提出需要 : 將[B]暫存空Rack補至上料區[A]
-                GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 :
-
-                if (mPanelDoB2C == false)//因應客戶要求自行由WEB程式和平板進行處理，故 MCS 不作處理
+                // ★ 迴圈保命（第2層防護）：任一步驟的非預期例外都不得讓背景執行緒終止而閃退，
+                //   記 log 後續行；單筆 oNeed 的精準隔離由 GenerateoRequireByoNeed 內層 try/catch 處理。
+                try
                 {
-                    GenerateoNeedDataByMCSAsBtoC();    //1-1 .主程序 == 提出需要 : 從[B]上料暫存批配料號送至生產[C] 
-                }
-                else
-                {   //搜尋來源是oNeed資料中AssignFlag = W(改成 P) , 起 = B3 , 終 = C5 ， 產生oNeed資料其起點 = C5 是來源資料終點，例終點 = A2 >> 指將空RACK送到上料區A 或 暫存區B 或 生產區 D (是否可用) 
-                    GenerateoNeedDataByMCSAsCtoABD();
-                }
-                GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 :
+                    //由平板產生了oNeed
+                    GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 : 尋找oNeed中AssignFlag = NULL的資料，以此產出oRequire關聯資料，而後註冊oPort的起終註記、oNeed中AssignFlag是Y正常或E異常
 
-                if (mUnloadAuto == true)
-                {
-                    GenerateoNeedDataByMCSAsEtoABD();    //1-2 .主程序 == 提出需要 : 將[E]暫存空Rack補至[A、B、D]
+                    GenerateoNeedDataByMCSAsBtoA(); //1-2 .主程序 == 提出需要 : 將[B]暫存空Rack補至上料區[A]
                     GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 :
+
+                    if (mPanelDoB2C == false)//因應客戶要求自行由WEB程式和平板進行處理，故 MCS 不作處理
+                    {
+                        GenerateoNeedDataByMCSAsBtoC();    //1-1 .主程序 == 提出需要 : 從[B]上料暫存批配料號送至生產[C]
+                    }
+                    else
+                    {   //搜尋來源是oNeed資料中AssignFlag = W(改成 P) , 起 = B3 , 終 = C5 ， 產生oNeed資料其起點 = C5 是來源資料終點，例終點 = A2 >> 指將空RACK送到上料區A 或 暫存區B 或 生產區 D (是否可用)
+                        GenerateoNeedDataByMCSAsCtoABD();
+                    }
+                    GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 :
+
+                    if (mUnloadAuto == true)
+                    {
+                        GenerateoNeedDataByMCSAsEtoABD();    //1-2 .主程序 == 提出需要 : 將[E]暫存空Rack補至[A、B、D]
+                        GenerateoRequireByoNeed();      //1-0 .主程式 == 轉成需求 :
+                    }
+                    GenerateoNeedDataByMCSEsBtoF();     //1-2 .主程序 == 提出需要 : 從[E]下料暫存批配料號送至退pin[F]
+                    GenerateoRequireByoNeed();       //1-0 .主程式 == 轉成需求 :
+
+                    GenerateoMissionByoRequire();   //2-0 .主程序 == 尋找oRequire表中未指派的項目，產生oMission表
+                    RecyclingoRequireByOkFlag();    //3-0 .主程序 == 處理oRequire表中的OkFlag欄位，Y=完成，X=異常結束，C=取消
+
+                    //這一段不執行，異常的指派需由oMission的OkFlag改變處理，否則會一直輪迴新增刪除
+                    //RecyclingoRequireByAssignFlag();//4-0 .主程序 == 處理oRequire表中的 AssignFlag 欄位為 Y、X、C
+
+                    RecyclingoNeedByAssignFlag();   //5-0 .主程序 == 處理oNeed表中的 AssignFlag 欄位為 E、X、C
                 }
-                GenerateoNeedDataByMCSEsBtoF();     //1-2 .主程序 == 提出需要 : 從[E]下料暫存批配料號送至退pin[F] 
-                GenerateoRequireByoNeed();       //1-0 .主程式 == 轉成需求 :
-
-                GenerateoMissionByoRequire();   //2-0 .主程序 == 尋找oRequire表中未指派的項目，產生oMission表
-                RecyclingoRequireByOkFlag();    //3-0 .主程序 == 處理oRequire表中的OkFlag欄位，Y=完成，X=異常結束，C=取消
-
-                //這一段不執行，異常的指派需由oMission的OkFlag改變處理，否則會一直輪迴新增刪除
-                //RecyclingoRequireByAssignFlag();//4-0 .主程序 == 處理oRequire表中的 AssignFlag 欄位為 Y、X、C
-
-                RecyclingoNeedByAssignFlag();   //5-0 .主程序 == 處理oNeed表中的 AssignFlag 欄位為 E、X、C
-
+                catch (Exception ex)
+                {
+                    WriteLog("98.主迴圈例外（已接住，續行，不終止進程）>> " + ex.Message, LogType.Error);
+                }
 
                 Thread.Sleep(50);
             }
@@ -163,43 +171,139 @@ namespace svrPair
             DataTable dtoNeed = mSql.QuerySqlByAutoOpen("select * from oNeed where (AssignFlag is NULL or RTRIM(AssignFlag) ='') order by TaskDateTime").Tables[0];
             foreach (DataRow dr in dtoNeed.Rows)
             {
-                switch (dr["ObjStation"].ToString().Substring(0, 1))
-                {               //這裡會執行的oNeed為人員選的有如下 == 平板的操作行為
-                    case "A":   //上料區A >> 暫存區B，將放RACK及製程前材料運至暫存區，如A1 >> B3
-                    case "C":   //生產區C >> 生產區D、上料區A、暫存區B，將空RACK運送至沒有RACK的地方，如C1 >> A1
-                    case "D":   //生產區D >> 下料區E，將放RACK及製程後材料運至下料區，如D2 >> E1
-                    case "F":   //下料區F >> 上料區A、生產區D、暫存區B，將下完料的空RACK運送至沒有RACK的地方，如E1 >> A1
-                    case "J":   // <--- ★★★ 新增這一行：3F 插針室 ★★★
-                    case "H":   // <--- ★★★ 新增：2F 成型後 -> 4F 烘烤前入貨區 ★★★
-                    case "L":   // <--- ★★★ 新增：4F 出貨區 -> 3F 品檢區 ★★★
-                    case "M":   // <--- ★★★ 新增：2F 雷雕區 -> O/P/T ★★★
-                    case "T":   // <--- ★★★ 新增：2F V cut區 -> O/P ★★★
-                    case "Q":   // <--- ★★★ 新增：2F 出料區 -> 清洗區 ★★★
-                    case "R":   // <--- ★★★ 新增：2F 廢料區 -> 廢料回收區 ★★★
-                    case "O":   // <--- ★★★ 新增：2F OP上料區(左) -> M/Q/R (Release回送空板) ★★★
-                    case "P":   // <--- ★★★ 新增：2F OP上料區(右) -> M/Q/R (Release回送空板) ★★★
-                    case "S":   // <--- ★★★ 新增：2F 清洗區 -> M/Q/R (Release回送空板) ★★★
-                    case "N":   // <--- ★★★ 新增：2F 廢料回收區 -> M/Q/R (Release回送空板) ★★★
-                        // ★★★ 空平板自動回收卡控：檢查目的地是否有 oPortBinding 綁定 ★★★
-                        if (CheckAndHandleEmptyPlateRecovery(dr))
-                        {
-                            break; // 空平板卡控處理中，跳過此 oNeed
-                        }
-                        WriteLog("05.處理平板配對");
-                        ProcessoNeedToRequire(dr["ObjStation"].ToString().Substring(0, 1), dr);
-                        break;
-                    case "B":   //暫存區B >> 上料區A，將下完料的空RACK運送至沒有RACK的地方，如B1 >> A1
-                                //暫存區B >> 生產區C，將放RACK及製程前材料運至生產區的地方，如B2 >> C1
-                    case "E":   //暫存區E >> 上料區F，將放RACK及製程完材料運至退pin區的地方，如E2 >> F1
-                    case "G":   // ★★★ G區（1F電梯暫存區）→ J區（3F插針室）：Release 回送空板 ★★★
-                    case "K":   // ★★★ K區（4F烘烤前入貨區）→ H區（2F成型後）：Release 回送空板 ★★★
-                    case "I":   // ★★★ I區（3F品檢區）→ L區（4F烘烤後）：Release 回送空板 / NG回送 ★★★
-                        WriteLog("05.處理系統配對");
-                        ProcessoNeedToRequire(dr["ObjStation"].ToString().Substring(0, 1), dr);
-                        break;
-                    default:
-                        break;
+                // ★ 單筆隔離（第1層防護）：任一筆 oNeed 處理失敗只影響該筆，不得拖垮整個迴圈/進程。
+                //   過去此處無 try/catch，毒資料拋 SqlException → 背景執行緒終止 → FleetManager 閃退。
+                try
+                {
+                    ProcessSingleoNeed(dr);
                 }
+                catch (Exception ex)
+                {
+                    HandleoNeedRowException(dr, ex);
+                }
+            }
+        }
+        #endregion
+
+        #region [1-0a .副程式 == ProcessSingleoNeed == 處理單筆 oNeed（依區域分派平板/系統配對）]
+        private void ProcessSingleoNeed(DataRow dr)
+        {
+            string objStation = dr["ObjStation"].ToString();
+            if (objStation.Length < 1)
+            {
+                // 站號空白屬資料異常：標 X 隔離，避免 Substring 例外與每輪重爆
+                WriteLog("06.處理異常資料 >> 資料表 : oNeed , ObjStation 空白，標記 X 隔離", LogType.Warnning);
+                QuarantineoNeedByTaskDateTime(dr["TaskDateTime"].ToString());
+                return;
+            }
+
+            switch (objStation.Substring(0, 1))
+            {               //這裡會執行的oNeed為人員選的有如下 == 平板的操作行為
+                case "A":   //上料區A >> 暫存區B，將放RACK及製程前材料運至暫存區，如A1 >> B3
+                case "C":   //生產區C >> 生產區D、上料區A、暫存區B，將空RACK運送至沒有RACK的地方，如C1 >> A1
+                case "D":   //生產區D >> 下料區E，將放RACK及製程後材料運至下料區，如D2 >> E1
+                case "F":   //下料區F >> 上料區A、生產區D、暫存區B，將下完料的空RACK運送至沒有RACK的地方，如E1 >> A1
+                case "J":   // 3F 插針室
+                case "H":   // 2F 成型後 -> 4F 烘烤前入貨區
+                case "L":   // 4F 出貨區 -> 3F 品檢區
+                case "M":   // 2F 雷雕區 -> O/P/T
+                case "T":   // 2F V cut區 -> O/P
+                case "Q":   // 2F 出料區 -> 清洗區
+                case "R":   // 2F 廢料區 -> 廢料回收區
+                case "O":   // 2F OP上料區(左) -> M/Q/R (Release回送空板)
+                case "P":   // 2F OP上料區(右) -> M/Q/R (Release回送空板)
+                case "S":   // 2F 清洗區 -> M/Q/R (Release回送空板)
+                case "N":   // 2F 廢料回收區 -> M/Q/R (Release回送空板)
+                    // ★★★ 空平板自動回收卡控：檢查目的地是否有 oPortBinding 綁定 ★★★
+                    if (CheckAndHandleEmptyPlateRecovery(dr))
+                    {
+                        break; // 空平板卡控處理中，跳過此 oNeed
+                    }
+                    WriteLog(string.Format("05.處理平板配對 >> ObjStation:{0} , EndStation:{1} , WorkOrder:{2} , RackId:{3}",
+                        objStation, dr["EndStation"], dr["WorkOrder"], dr["RackId"]));
+                    ProcessoNeedToRequire(objStation.Substring(0, 1), dr);
+                    break;
+                case "B":   //暫存區B >> 上料區A，將下完料的空RACK運送至沒有RACK的地方，如B1 >> A1
+                            //暫存區B >> 生產區C，將放RACK及製程前材料運至生產區的地方，如B2 >> C1
+                case "E":   //暫存區E >> 上料區F，將放RACK及製程完材料運至退pin區的地方，如E2 >> F1
+                case "G":   // G區（1F電梯暫存區）→ J區（3F插針室）：Release 回送空板
+                case "K":   // K區（4F烘烤前入貨區）→ H區（2F成型後）：Release 回送空板
+                case "I":   // I區（3F品檢區）→ L區（4F烘烤後）：Release 回送空板 / NG回送
+                    WriteLog(string.Format("05.處理系統配對 >> ObjStation:{0} , EndStation:{1} , WorkOrder:{2} , RackId:{3}",
+                        objStation, dr["EndStation"], dr["WorkOrder"], dr["RackId"]));
+                    ProcessoNeedToRequire(objStation.Substring(0, 1), dr);
+                    break;
+                default:
+                    break;
+            }
+        }
+        #endregion
+
+        #region [1-0b .副程式 == 單筆 oNeed 例外處理（資料類隔離 / 連線類保留重試）]
+        private void HandleoNeedRowException(DataRow dr, Exception ex)
+        {
+            string obj = SafeCol(dr, "ObjStation");
+            string end = SafeCol(dr, "EndStation");
+            string wo = SafeCol(dr, "WorkOrder");
+            string rack = SafeCol(dr, "RackId");
+            string task = SafeCol(dr, "TaskDateTime");
+
+            if (IsDataException(ex))
+            {
+                // 資料類例外（語法/未閉合引號/截斷/約束）：重試也不會好 → 隔離標 X，
+                // 交由 RecyclingoNeedByAssignFlag 清除，避免每輪重爆、log 狂洗。
+                WriteLog(string.Format("06E.毒資料隔離 >> 將 oNeed 標 X , ObjStation:{0} , EndStation:{1} , WorkOrder:{2} , RackId:{3} , Error:{4}",
+                    obj, end, wo, rack, ex.Message), LogType.Error);
+                QuarantineoNeedByTaskDateTime(task);
+            }
+            else
+            {
+                // 連線/暫時性例外：保留重試，不標 X，避免 DB 短暫抖動誤隔離好資料。
+                WriteLog(string.Format("06W.暫時性例外保留重試 >> ObjStation:{0} , EndStation:{1} , WorkOrder:{2} , RackId:{3} , Error:{4}",
+                    obj, end, wo, rack, ex.Message), LogType.Warnning);
+            }
+        }
+
+        private static string SafeCol(DataRow dr, string col)
+        {
+            try { return dr[col]?.ToString() ?? ""; }
+            catch { return ""; }
+        }
+
+        // 已知「資料類」SQL 錯誤碼（重試不會好）：語法/未閉合引號/截斷/約束/型別轉換/PK 重複等
+        private static readonly System.Collections.Generic.HashSet<int> DataErrorNumbers =
+            new System.Collections.Generic.HashSet<int> { 102, 103, 104, 105, 205, 206, 245, 257, 266, 515, 547, 2627, 2601, 2628, 8114, 8115, 8152 };
+
+        private static bool IsDataException(Exception ex)
+        {
+            for (Exception e = ex; e != null; e = e.InnerException)
+            {
+                var sql = e as System.Data.SqlClient.SqlException;
+                if (sql != null)
+                {
+                    foreach (System.Data.SqlClient.SqlError err in sql.Errors)
+                    {
+                        if (DataErrorNumbers.Contains(err.Number)) return true;
+                    }
+                    return false; // 是 SqlException 但非已知資料錯誤 → 視為暫時性，保留重試
+                }
+            }
+            return false; // 連線層或非 SQL 例外 → 保守視為暫時性，保留重試（避免誤隔離好資料）
+        }
+
+        private void QuarantineoNeedByTaskDateTime(string taskDateTime)
+        {
+            if (string.IsNullOrEmpty(taskDateTime)) return;
+            try
+            {
+                // 只用 TaskDateTime（程式產生純數字、無注入風險）為 key；
+                // 不可用含使用者輸入的 ObjStation/WorkOrder 比對，否則該值含單引號時連標記語句也會壞。
+                // （T6 參數化時一併改為 SqlParameter）
+                mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag ='X' where TaskDateTime ='" + taskDateTime + "'");
+            }
+            catch (Exception ex)
+            {
+                WriteLog("06X.隔離標記失敗 >> TaskDateTime:" + taskDateTime + " , Error:" + ex.Message, LogType.Warnning);
             }
         }
         #endregion
