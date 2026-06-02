@@ -8,6 +8,7 @@ using SAA_MsSql;
 using SAA_PUBLIC;
 using cTools;
 using System.Data;
+using System.Data.SqlClient;
 using System.IO;
 using System.Threading;
 using svrPair.Database;
@@ -52,7 +53,7 @@ namespace svrPair
         #region [Setting == 設定 D、E 區的啟用停用]
         public void SettingBlockUseFlag(string Block, string UseFlag)
         {
-            mSql.WriteSqlByAutoOpen("update oPort set UseFlag ='" + UseFlag + "' where Block ='" + Block + "'");
+            mSql.WriteSqlByAutoOpen("update oPort set UseFlag = @uf where Block = @blk", SP("@uf", UseFlag), SP("@blk", Block));
             WriteLog(string.Format("OA.設定{0}{1}", Block == "D" ? "生產區 D " : "下料區 E ", UseFlag == "Y" ? "啟用" : "停用"));
         }
         #endregion
@@ -270,6 +271,10 @@ namespace svrPair
             catch { return ""; }
         }
 
+        /// <summary>SqlParameter 工廠：null 值自動轉 DBNull，供全檔參數化 SQL 使用。</summary>
+        private static SqlParameter SP(string name, object value)
+            => new SqlParameter(name, value ?? DBNull.Value);
+
         // 已知「資料類」SQL 錯誤碼（重試不會好）：語法/未閉合引號/截斷/約束/型別轉換/PK 重複等
         private static readonly System.Collections.Generic.HashSet<int> DataErrorNumbers =
             new System.Collections.Generic.HashSet<int> { 102, 103, 104, 105, 205, 206, 245, 257, 266, 515, 547, 2627, 2601, 2628, 8114, 8115, 8152 };
@@ -299,7 +304,7 @@ namespace svrPair
                 // 只用 TaskDateTime（程式產生純數字、無注入風險）為 key；
                 // 不可用含使用者輸入的 ObjStation/WorkOrder 比對，否則該值含單引號時連標記語句也會壞。
                 // （T6 參數化時一併改為 SqlParameter）
-                mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag ='X' where TaskDateTime ='" + taskDateTime + "'");
+                mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag ='X' where TaskDateTime = @t", SP("@t", taskDateTime));
             }
             catch (Exception ex)
             {
@@ -399,7 +404,7 @@ namespace svrPair
                 //退貨流程R=Reject
                 else if (odr["AssignFlag"].ToString() == "R")
                 {
-                    string workOrder = mSql.QuerySqlByAutoOpen("select WorkOrder from oPort where StationNo = '" + odr["EndStation"] + "'").Tables[0].Rows[0]["WorkOrder"].ToString();
+                    string workOrder = mSql.QuerySqlByAutoOpen("select WorkOrder from oPort where StationNo = @sn", SP("@sn", odr["EndStation"].ToString())).Tables[0].Rows[0]["WorkOrder"].ToString();
                     mdtQuery = GetoPort_NoRack_NoPair_CanWork_Sort_ByBlock("'B'");
                     foreach (DataRow dr in mdtQuery.Rows)
                     {
@@ -440,7 +445,7 @@ namespace svrPair
                 WorkOrder = dr["WorkOrder"].ToString();     //string[] sID = dr["WorkOrder"].ToString().Split('^');      //if (sID.Length >= 3) { PartNo = sID[3]; }
             }
 
-            DataTable dt = mSql.QuerySqlByAutoOpen("select * from oRequire where ObjStation ='" + ObjStation + "'").Tables[0];
+            DataTable dt = mSql.QuerySqlByAutoOpen("select * from oRequire where ObjStation = @obj", SP("@obj", ObjStation)).Tables[0];
             if (dt.Rows.Count > 0)
             {
                 UpdateoNeedAssignFlag("X", ObjStation, EndStation);
@@ -455,8 +460,10 @@ namespace svrPair
             }
             else
             {
-                mSql.WriteSqlByAutoOpen("insert into oRequire(TaskDateTime, ObjStation, SerialNo, BeginStation, EndStation, TaskSource, RackId, WorkOrder) values('" + TaskDateTime +
-                                    "','" + ObjStation + "',0,'" + ObjStation + "','" + EndStation + "','MCS','" + RackId + "','" + WorkOrder + "')");
+                mSql.WriteSqlByAutoOpen(
+                    "insert into oRequire(TaskDateTime, ObjStation, SerialNo, BeginStation, EndStation, TaskSource, RackId, WorkOrder) " +
+                    "values(@td, @obj, 0, @obj, @end, 'MCS', @rack, @wo)",
+                    SP("@td", TaskDateTime), SP("@obj", ObjStation), SP("@end", EndStation), SP("@rack", RackId), SP("@wo", WorkOrder));
                 WriteLog(string.Format("09.產生oRequire >> oNeed -> oRequire , TaskDateTime : {0} , BeginStation : {1} , EndStation : {2} , WorkOrder : {3}", TaskDateTime, ObjStation, EndStation, WorkOrder));
 
                 UpdateoNeedAssignFlag("Y", ObjStation, EndStation);
@@ -477,7 +484,7 @@ namespace svrPair
         private bool CheckoPortBgnToEndIsNullAndUseFlagAsY(string StationNo1, string StationNo2)
         {
             bool rslt = false;
-            DataTable dtoPort = mSql.QuerySqlByAutoOpen("select * from oPort where UseFlag ='Y' and StationNo in('" + StationNo1 + "','" + StationNo2 + "') and (BgnToEnd is null or RTRIM(BgnToEnd)='')").Tables[0];
+            DataTable dtoPort = mSql.QuerySqlByAutoOpen("select * from oPort where UseFlag ='Y' and StationNo in(@s1, @s2) and (BgnToEnd is null or RTRIM(BgnToEnd)='')", SP("@s1", StationNo1), SP("@s2", StationNo2)).Tables[0];
             if (dtoPort.Rows.Count == 2) { rslt = true; }
             return rslt;
         }
@@ -538,7 +545,7 @@ namespace svrPair
                 //dt = mSql.QuerySqlByAutoOpen("select * from oPort where UseFlag ='Y' and (WorkOrder is not null or RTRIM(WorkOrder) <>'') and (BgnToEnd is null or RTRIM(BgnToEnd) ='') and" +
                 //                                   " Block in(" + Block + ") and PartNo ='" + PartNo + "' order by Priority desc").Tables[0];
                 dt = mSql.QuerySqlByAutoOpen("select * from oPort where UseFlag ='Y' and HaveFlag ='3' and (BgnToEnd is null or RTRIM(BgnToEnd) ='') and" +
-                                                   " Block in(" + Block + ") and WorkOrder like'%" + PartNo + "%' order by Priority desc").Tables[0];
+                                                   " Block in(" + Block + ") and WorkOrder like @pat order by Priority desc", SP("@pat", "%" + PartNo + "%")).Tables[0];
             }
 
             return dt;
@@ -580,11 +587,13 @@ namespace svrPair
         {
             bool rslt = false;
             //FHT^N01^批號^料號^製單^列印日期 :::: FHT^N01^238090671^DMT6CVJ1536D^P3804231^202309181158  //string[] sID = dr["WorkOrder"].ToString().Split('^');if (sID.Length >= 3) { PartNo = sID[3]; }
-            DataTable dt = mSql.QuerySqlByAutoOpen("select * from oMission where BeginStation ='" + dr["BeginStation"].ToString() + "' and EndStation ='" + dr["EndStation"].ToString() + "'").Tables[0];
+            DataTable dt = mSql.QuerySqlByAutoOpen("select * from oMission where BeginStation = @bgn and EndStation = @end", SP("@bgn", dr["BeginStation"].ToString()), SP("@end", dr["EndStation"].ToString())).Tables[0];
             if (dt.Rows.Count == 0)
             {
-                mSql.WriteSqlByAutoOpen("Insert into oMission(TaskDateTime, SerialNo, BeginStation, EndStation, TaskSource, ShuttleId, RackId, WorkOrder) values('" + dr["TaskDateTime"].ToString() + "',0,'" +
-                                        dr["BeginStation"].ToString() + "','" + dr["EndStation"].ToString() + "','MCS',0,'" + dr["RackId"].ToString() + "','" + dr["WorkOrder"].ToString() + "')");
+                mSql.WriteSqlByAutoOpen(
+                    "Insert into oMission(TaskDateTime, SerialNo, BeginStation, EndStation, TaskSource, ShuttleId, RackId, WorkOrder) " +
+                    "values(@td, 0, @bgn, @end, 'MCS', 0, @rack, @wo)",
+                    SP("@td", dr["TaskDateTime"].ToString()), SP("@bgn", dr["BeginStation"].ToString()), SP("@end", dr["EndStation"].ToString()), SP("@rack", dr["RackId"].ToString()), SP("@wo", dr["WorkOrder"].ToString()));
                 rslt = true;
             }
             return rslt;
@@ -605,7 +614,7 @@ namespace svrPair
 
             // 查詢目的地是否有 oPortBinding 綁定
             DataTable dtBinding = mSql.QuerySqlByAutoOpen(
-                "SELECT * FROM oPortBinding WHERE LoadingPort = '" + endStation + "' AND UseFlag = 'Y'").Tables[0];
+                "SELECT * FROM oPortBinding WHERE LoadingPort = @end AND UseFlag = 'Y'", SP("@end", endStation)).Tables[0];
 
             if (dtBinding.Rows.Count == 0) return false; // 無綁定，不卡控
 
@@ -614,9 +623,9 @@ namespace svrPair
 
             // 取得上料區（目的地）和下料區的狀態
             DataTable dtLoadingPort = mSql.QuerySqlByAutoOpen(
-                "SELECT HaveFlag FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+                "SELECT HaveFlag FROM oPort WHERE StationNo = @end", SP("@end", endStation)).Tables[0];
             DataTable dtUnloadingPort = mSql.QuerySqlByAutoOpen(
-                "SELECT HaveFlag FROM oPort WHERE StationNo = '" + unloadingPort + "'").Tables[0];
+                "SELECT HaveFlag FROM oPort WHERE StationNo = @unload", SP("@unload", unloadingPort)).Tables[0];
 
             if (dtLoadingPort.Rows.Count == 0 || dtUnloadingPort.Rows.Count == 0) return false;
 
@@ -631,7 +640,7 @@ namespace svrPair
                 // ★ 上料區雖已無空板，但路徑仍被占用（AGV 正在搬走途中），繼續卡控
                 // 避免 M→O 跑進 ProcessoNeedToRequire 後被 CheckoPortBgnToEndIsNullAndUseFlagAsY 標記為 E 刪除
                 DataTable dtBgn = mSql.QuerySqlByAutoOpen(
-                    "SELECT BgnToEnd FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+                    "SELECT BgnToEnd FROM oPort WHERE StationNo = @end", SP("@end", endStation)).Tables[0];
                 string bgnToEnd = dtBgn.Rows.Count > 0 ? dtBgn.Rows[0]["BgnToEnd"].ToString().Trim() : "";
                 if (!string.IsNullOrEmpty(bgnToEnd))
                 {
@@ -656,7 +665,7 @@ namespace svrPair
             // 上料區有空平板，需搬走
             // 檢查是否已存在空平板回收任務（oNeed / oRequire / oMission 皆需檢查，避免重複產生）
             DataTable dtExistingRecovery = mSql.QuerySqlByAutoOpen(
-                "SELECT * FROM oNeed WHERE ObjStation = '" + endStation + "' AND TaskSource = 'PLATE_RECOVERY' AND (AssignFlag IS NULL OR RTRIM(AssignFlag) = '' OR AssignFlag IN ('W','R'))").Tables[0];
+                "SELECT * FROM oNeed WHERE ObjStation = @end AND TaskSource = 'PLATE_RECOVERY' AND (AssignFlag IS NULL OR RTRIM(AssignFlag) = '' OR AssignFlag IN ('W','R'))", SP("@end", endStation)).Tables[0];
 
             if (dtExistingRecovery.Rows.Count > 0)
             {
@@ -665,7 +674,7 @@ namespace svrPair
             }
 
             DataTable dtExistingRequire = mSql.QuerySqlByAutoOpen(
-                "SELECT * FROM oRequire WHERE ObjStation = '" + endStation + "' AND EndStation != '" + endStation + "' AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')").Tables[0];
+                "SELECT * FROM oRequire WHERE ObjStation = @end AND EndStation != @end AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')", SP("@end", endStation)).Tables[0];
 
             if (dtExistingRequire.Rows.Count > 0)
             {
@@ -674,7 +683,7 @@ namespace svrPair
             }
 
             DataTable dtExistingMission = mSql.QuerySqlByAutoOpen(
-                "SELECT * FROM oMission WHERE BeginStation = '" + endStation + "' AND EndStation != '" + endStation + "' AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')").Tables[0];
+                "SELECT * FROM oMission WHERE BeginStation = @end AND EndStation != @end AND (OkFlag IS NULL OR RTRIM(OkFlag) = '')", SP("@end", endStation)).Tables[0];
 
             if (dtExistingMission.Rows.Count > 0)
             {
@@ -712,16 +721,16 @@ namespace svrPair
             // 產生空平板回收 oNeed
             string rackId = "";
             DataTable dtRack = mSql.QuerySqlByAutoOpen(
-                "SELECT RackId FROM oPort WHERE StationNo = '" + endStation + "'").Tables[0];
+                "SELECT RackId FROM oPort WHERE StationNo = @end", SP("@end", endStation)).Tables[0];
             if (dtRack.Rows.Count > 0)
             {
                 rackId = dtRack.Rows[0]["RackId"].ToString().Trim();
             }
 
             mSql.WriteSqlByAutoOpen(
-                "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag) VALUES('" +
-                endStation + "','" + rackId + "','','" + recoveryTarget + "','PLATE_RECOVERY','" +
-                GetTaskDateTimeIncludeRandom(true) + "','')");
+                "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag) " +
+                "VALUES(@obj, @rack, '', @target, 'PLATE_RECOVERY', @td, '')",
+                SP("@obj", endStation), SP("@rack", rackId), SP("@target", recoveryTarget), SP("@td", GetTaskDateTimeIncludeRandom(true)));
 
             WriteLog(string.Format("05A.空平板卡控 >> 產生空平板回收 oNeed: {0} → {1}", endStation, recoveryTarget));
             return true; // 卡住物料 oNeed，等回收完成後下一輪再處理
@@ -753,8 +762,8 @@ namespace svrPair
                 if (string.IsNullOrEmpty(trimmedArea)) continue;
 
                 DataTable dt = mSql.QuerySqlByAutoOpen(
-                    "SELECT StationNo FROM oPort WHERE Block = '" + trimmedArea +
-                    "' AND HaveFlag = '0' AND UseFlag = 'Y' AND (BgnToEnd IS NULL OR RTRIM(BgnToEnd) = '') ORDER BY Port").Tables[0];
+                    "SELECT StationNo FROM oPort WHERE Block = @blk" +
+                    " AND HaveFlag = '0' AND UseFlag = 'Y' AND (BgnToEnd IS NULL OR RTRIM(BgnToEnd) = '') ORDER BY Port", SP("@blk", trimmedArea)).Tables[0];
 
                 foreach (DataRow row in dt.Rows)
                 {
@@ -773,7 +782,7 @@ namespace svrPair
         #region [2-2 .次程序 == UpdateoRequireAssignFlag() == 更新 oMission 表資料  ]
         private void UpdateoRequireAssignFlag(string TaskDateTime, string ObjStation, int SerialNo, string AssignFlag)
         {
-            mSql.WriteSqlByAutoOpen("update oRequire set AssignFlag ='" + AssignFlag + "' where TaskDateTime ='" + TaskDateTime + "' and ObjStation ='" + ObjStation + "' and SerialNo=" + SerialNo);
+            mSql.WriteSqlByAutoOpen("update oRequire set AssignFlag = @af where TaskDateTime = @td and ObjStation = @obj and SerialNo = @sn", SP("@af", AssignFlag), SP("@td", TaskDateTime), SP("@obj", ObjStation), SP("@sn", SerialNo));
             WriteLog(string.Format("22.更新oRequire >> 已指派 , TaskDateTime : {0} ,ObjStation : {1} , SerialNo : {2} :: AssignFlag ={3}", TaskDateTime, ObjStation, SerialNo.ToString(), AssignFlag));
         }
         #endregion
@@ -781,43 +790,46 @@ namespace svrPair
         #region [2-3 .次程序 == InsertoNee() == 新增oNeed ]
         private void InsertoNeed(string ObjStation, string RackId, string WorkOrder, string EndStation)   //
         {
-            mSql.WriteSqlByAutoOpen("Insert into oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime) values('" + ObjStation + "','" + RackId + "','" + WorkOrder +
-                                    "','" + EndStation + "','MCS','" + GetTaskDateTimeIncludeRandom(true) + "')");
+            mSql.WriteSqlByAutoOpen(
+                "Insert into oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime) " +
+                "values(@obj, @rack, @wo, @end, 'MCS', @td)",
+                SP("@obj", ObjStation), SP("@rack", RackId), SP("@wo", WorkOrder), SP("@end", EndStation), SP("@td", GetTaskDateTimeIncludeRandom(true)));
         }
         #endregion
 
         #region [2-4 .次程序 == UpdateoNeedAssignFlag() == 更新 oNeed 的 AssignFlag ]
         private void UpdateoNeedAssignFlag(string AssignFlag, string ObjStation, string EndStation)
         {
-            mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag ='" + AssignFlag + "' where ObjStation ='" + ObjStation + "' and EndStation='" + EndStation + "'");
+            mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag = @af where ObjStation = @obj and EndStation = @end", SP("@af", AssignFlag), SP("@obj", ObjStation), SP("@end", EndStation));
         }
         #endregion
 
         #region [2-5 .次程序 == UpdateoPortBgnToEnd() == 更新 oPort 的 BgnToEnd ]
         private void UpdateoPortBgnToEnd(string StationNo1, string StationNo2, string BgnToEnd = null)
         {
-            mSql.WriteSqlByAutoOpen("update oPort set BgnToEnd ='" + BgnToEnd + "' where StationNo in('" + StationNo1 + "','" + StationNo2 + "')");
+            // 註：原拼接寫法在 BgnToEnd 為 null 時會寫入空字串（非 NULL），此處以 (BgnToEnd ?? "") 維持完全相同行為。
+            mSql.WriteSqlByAutoOpen("update oPort set BgnToEnd = @bte where StationNo in(@s1, @s2)", SP("@bte", BgnToEnd ?? ""), SP("@s1", StationNo1), SP("@s2", StationNo2));
         }
         #endregion
 
         #region [2-6 .次程序 == DeleteoNeedByAssignFlag() == 刪除 oNeed 指定註記的資料 ]
         private void DeleteoNeedByAssignFlag(string ObjStation, string EndStation, string AssignFlag)
         {
-            mSql.WriteSqlByAutoOpen("Delete oNeed where ObjStation ='" + ObjStation + "' and  EndStation ='" + EndStation + "' and AssignFlag ='" + AssignFlag + "'");
+            mSql.WriteSqlByAutoOpen("Delete oNeed where ObjStation = @obj and EndStation = @end and AssignFlag = @af", SP("@obj", ObjStation), SP("@end", EndStation), SP("@af", AssignFlag));
         }
         #endregion
 
         #region [2-7 .次程序 == DeleteoRequireByOkFlag() == 刪除 oRequire 完成註記的資料 ]
         private void DeleteoRequireByOkFlag(string TaskDateTime, string ObjStation, int SerialNo, string EndStation, string OkFlag)
         {
-            mSql.WriteSqlByAutoOpen("Delete oRequire where TaskDateTime ='" + TaskDateTime + "' and ObjStation ='" + ObjStation + "' and SerialNo =" + SerialNo + " and EndStation ='" + EndStation + "' and OkFlag ='" + OkFlag + "'");
+            mSql.WriteSqlByAutoOpen("Delete oRequire where TaskDateTime = @td and ObjStation = @obj and SerialNo = @sn and EndStation = @end and OkFlag = @ok", SP("@td", TaskDateTime), SP("@obj", ObjStation), SP("@sn", SerialNo), SP("@end", EndStation), SP("@ok", OkFlag));
         }
         #endregion
 
         #region [2-8 .次程序 == DeleteoRequireByAssignFlag() == 刪除 oRequier 指定註記的資料 ]
         private void DeleteoRequireByAssignFlag(string ObjStation, string EndStation, string AssignFlag)
         {
-            mSql.WriteSqlByAutoOpen("Delete oRequire where ObjStation ='" + ObjStation + "' and  EndStation ='" + EndStation + "' and AssignFlag ='" + AssignFlag + "'");
+            mSql.WriteSqlByAutoOpen("Delete oRequire where ObjStation = @obj and EndStation = @end and AssignFlag = @af", SP("@obj", ObjStation), SP("@end", EndStation), SP("@af", AssignFlag));
         }
         #endregion
 
@@ -851,7 +863,7 @@ namespace svrPair
                         if (mPanelDoB2C == true)
                         {
                             //處理起點為其他筆oNeed的終點，且該筆資料AssignFlag為 P，將該AssignFlag改成NULL
-                            mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag = NULL where AssignFlag ='P' and EndStation='" + dr["ObjStation"].ToString() + "'");
+                            mSql.WriteSqlByAutoOpen("update oNeed set AssignFlag = NULL where AssignFlag ='P' and EndStation = @end", SP("@end", dr["ObjStation"].ToString()));
                         }
                         break;
                     default:
