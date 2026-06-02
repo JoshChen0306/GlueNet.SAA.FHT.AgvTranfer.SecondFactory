@@ -586,7 +586,7 @@ namespace SCP.Controllers
                 _DBContext.oPort
                     .Where(p => p.StationNo == stationNo)
                     .ExecuteUpdate(setters => setters
-                        .SetProperty(p => p.HaveFlag, "0")      // 設為空架
+                        .SetProperty(p => p.HaveFlag, "1")      // 設為空板：清除物料時空平板留置原位，標 1 以免自動回送往此格疊板（RackId 仍清空）
                         .SetProperty(p => p.WorkOrder, "")      // 清除工單
                         .SetProperty(p => p.RackId, "")         // 清除貨架
                         .SetProperty(p => p.PutTime, ""));      // 清除放置時間
