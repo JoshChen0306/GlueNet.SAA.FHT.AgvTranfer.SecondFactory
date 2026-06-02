@@ -58,6 +58,9 @@
   </Choose>
   <ItemGroup>
     <Compile Include="cPairTests.cs" />
+    <Compile Include="IntegrationTestBase.cs" />
+    <Compile Include="GenerateoRequireByoNeed_ResilienceTests.cs" />
+    <Compile Include="GenerateoRequireByoNeed_ParameterizationTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
