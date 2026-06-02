@@ -88,3 +88,11 @@ svrPairTests (整合測試, 連 DESKTOP-2I3FKA2)
 - Layer A/B 的 oNeed `WorkOrder` 須非空（Block 'A' 空工單會走 `06.處理異常資料` 取消路徑，到不了 INSERT）。
 - 確保 `B92` 無 `oPortBinding` 綁定（否則先進 `CheckAndHandleEmptyPlateRecovery` 卡控、不進 05）。
 - `TestCleanup` 用 `[TestCleanup]`，無論斷言成敗一律執行清除。
+
+## 實作後補述（已知限制與事件記錄）
+
+1. **同站號隔離覆寫（已知限制，不在本次範圍修）**：`UpdateoNeedAssignFlag` 以「ObjStation+EndStation」配對更新。若毒筆與另一筆正常 oNeed 共用同一組站號，正常筆成功時的 `Y` 會覆寫毒筆剛標的 `X`。但 `X`/`Y` 皆會被主查詢（只撿 NULL/空）排除、不會再被處理重爆，故功能上仍安全；僅語意上毒筆顯示為 Y。測試以第二組站號 A93→B94 規避。
+2. **oRequire.RackId 截斷在本 DB 會丟例外（非靜默）**：DESKTOP-2I3FKA2 ANSI_WARNINGS=ON，30 字 RackId 塞 oRequire(nvarchar20) 會丟 8152，故韌性測試成立。
+3. **測試事件記錄**：開發過程中，注入測試的 `DROP TABLE` payload 在參數化尚未上線時真的 drop 掉開發機 `oRequire`（已用相同 schema 重建，但無 PK/索引；若有備份建議還原）。注入測試 payload 已永久改為非破壞性（`x' OR '1'='1`）。
+4. **Block IN-list 未參數化**：`GetoPort_*_ByBlock` 的 `Block in(...)` 為程式碼常數結構片段（呼叫端傳 `'A'`/`'A','B','D'` 等字面），非使用者輸入，刻意保留。
+5. **部署注意**：`cTest.csproj` 以 HintPath 參考 `..\Release\svrPair.dll`。部署 / 封裝時須確認新建置的 `svrPair.dll` 有更新到部署資料夾，否則 cTest.exe 仍鏈結舊版。
