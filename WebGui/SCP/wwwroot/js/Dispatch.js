@@ -324,7 +324,8 @@ $(function () {
                         rackId: s.rackId || s.RackId,
                         putTime: s.putTime || s.PutTime,
                         block: s.block || s.Block,
-                        machineName: s.machineName || s.MachineName
+                        machineName: s.machineName || s.MachineName,
+                        interfaceName: s.interfaceName || s.InterfaceName
                     };
                 });
 
@@ -370,15 +371,11 @@ $(function () {
                 // V Cut 物料終點也保持 disabled
                 $("#EndStation").prop("disabled", true);
             } else {
-                // M 區一般物料 或 T 區已完成物料 → 需掃描機台
-                console.log("=== MT區：選擇一般/已完成物料，顯示掃描機台按鈕 ===");
+                // M 區一般物料 或 T 區已完成物料 → 開放終點手選(O/P/S)，亦可掃描機台/手動輸入
+                console.log("=== MT區：選擇一般/已完成物料，開放終點選擇 + 顯示掃描機台按鈕 ===");
                 $("#machineScanRow").show();
-                // 如果終點已經有值（透過掃描機台設定），保持 disabled
-                if (!$("#EndStation").val()) {
-                    $("#EndStation").val("");
-                }
-                // MT 區終點始終保持 disabled
-                $("#EndStation").prop("disabled", true);
+                // 開放終點下拉，讓使用者可手選 O/P/S（與掃描/手動輸入並存）
+                $("#EndStation").prop("disabled", false);
             }
             return;  // MT 區處理完畢，不進入 switch
         }
@@ -495,9 +492,9 @@ $(function () {
             $("#WorkOrder").prop("disabled", false);  // 啟用供單號輸入
             console.log("WorkOrder disabled 狀態:", $("#WorkOrder").prop("disabled"));
         } else if (area == "MT") {
-            // MT 區（雷雕區 & V Cut 備貨區）：終點 disabled，透過掃描機台選擇
-            console.log("=== MT 區：終點 disabled，透過掃描機台選擇 ===");
-            $("#EndStation").prop("disabled", true);  // 終點設為 disabled
+            // MT 區（雷雕區 & V Cut 備貨區）：開放終點選擇，亦可透過掃描機台/手動輸入
+            console.log("=== MT 區：開放終點選擇 + 掃描機台 ===");
+            $("#EndStation").prop("disabled", false);
             $("#machineScanRow").show();
         } else if (area == "Q" || area == "R") {
             // Q (出料區) 和 R (廢料區)：終點自動選擇，供單號禁用
@@ -506,11 +503,6 @@ $(function () {
         } else {
             $("#EndStation").prop("disabled", true);
             $("#WorkOrder").prop("disabled", false);
-        }
-
-        // 2F 站內運輸：終點站只能透過掃描機台 / 手動輸入設定，禁止從下拉選單選擇
-        if (currentFloor === "2F - 站內運輸") {
-            $("#EndStation").prop("disabled", true);
         }
 
         // 從快取讀取 RackId
@@ -548,16 +540,16 @@ $(function () {
                 filterEndStationOptions("I", "0");
                 break;
             case "M":
-                // 顯示 O, P, T 區空架
-                filterEndStationOptions("O", "0");
-                filterEndStationOptions("P", "0");
+                // 顯示 O, P 區（空架 或 空板+oPortBinding 綁定），T 區空架
+                filterEndStationOptions("O", "0", true);
+                filterEndStationOptions("P", "0", true);
                 filterEndStationOptions("T", "0");
                 break;
             case "T":
-                // 顯示 O, P, S 區空架
-                filterEndStationOptions("O", "0");
-                filterEndStationOptions("P", "0");
-                filterEndStationOptions("S", "0");
+                // 顯示 O, P, S 區（空架 或 空板+oPortBinding 綁定）
+                filterEndStationOptions("O", "0", true);
+                filterEndStationOptions("P", "0", true);
+                filterEndStationOptions("S", "0", true);
                 break;
             case "Q":
                 filterEndStationOptions("S", "0");
@@ -965,8 +957,8 @@ $(function () {
                 matchedStation = stationNo;
                 break;
             }
-            // 比對 MachineName
-            if (station.machineName && station.machineName.toUpperCase().includes(inputMachineName)) {
+            // 比對 InterfaceName（完全相等，忽略大小寫）
+            if (station.interfaceName && station.interfaceName.toUpperCase() === inputMachineName) {
                 matchedStation = stationNo;
                 break;
             }
@@ -1519,7 +1511,8 @@ function updateStationCache(stations) {
             rackId: s.rackId,
             putTime: s.putTime,
             block: s.block,
-            machineName: s.machineName
+            machineName: s.machineName,
+            interfaceName: s.interfaceName
         };
     });
     isCacheLoaded = true;
@@ -1954,7 +1947,7 @@ function autoSelectEndStation(prefix, requiredHaveFlag, requiredReserve) {
 /**
  * 篩選終點選項（用於 EndStation focus 事件）
  */
-function filterEndStationOptions(prefix, requiredHaveFlag) {
+function filterEndStationOptions(prefix, requiredHaveFlag, allowBindingEmptyPlate) {
     $('#EndStation option').filter(function () {
         var tracname = $(this).val();
         if (!tracname || !tracname.startsWith(prefix)) return false;
@@ -1964,7 +1957,15 @@ function filterEndStationOptions(prefix, requiredHaveFlag) {
         var station = stationCache[tracname];
         if (!station) return false;
 
-        return station.haveFlag === requiredHaveFlag;
+        if (station.haveFlag === requiredHaveFlag) return true;
+
+        // 與手動輸入(processManualMachineInput)/Confirm 驗證邏輯一致：
+        // 空板(HaveFlag=1)且有 oPortBinding 綁定的站點也允許派送（後端 svrPair 會自動回收空板）
+        if (allowBindingEmptyPlate && station.haveFlag === "1" && portBindingList.indexOf(tracname) !== -1) {
+            return true;
+        }
+
+        return false;
     }).show();
 }
 

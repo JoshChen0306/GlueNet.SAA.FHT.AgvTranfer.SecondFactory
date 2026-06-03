@@ -427,7 +427,8 @@ namespace SCP.Controllers
                         p.WorkOrder,
                         p.RackId,
                         p.PutTime,
-                        p.MachineName
+                        p.MachineName,
+                        p.InterfaceName
                     })
                     .ToList();
 
