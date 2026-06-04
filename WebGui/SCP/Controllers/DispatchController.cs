@@ -279,34 +279,41 @@ namespace SCP.Controllers
             {
                 using var transaction = _DBContext.Database.BeginTransaction();
 
-                // 查詢被取消任務的 oMission（取得 ParentTaskDateTime 判斷關聯）
+                // 取得被取消任務的父關聯：先查 oMission，找不到再退查 oRequire。
+                // 空平板回收 O→Q 顯示於 oRequire，其 ParentTaskDateTime 指向卡控中的 M→O 源頭 oNeed；
+                // 跨樓層預調度則記在 oMission。兩者皆以 ParentTaskDateTime 連動取消。
                 var targetMission = _DBContext.oMission
                     .FirstOrDefault(m => m.TaskDateTime == taskDateTime);
+                string? parentTdt = targetMission?.ParentTaskDateTime;
+                if (string.IsNullOrEmpty(parentTdt))
+                {
+                    parentTdt = _DBContext.oRequire
+                        .Where(r => r.TaskDateTime == taskDateTime)
+                        .Select(r => r.ParentTaskDateTime)
+                        .FirstOrDefault();
+                }
 
                 // 收集所有要取消的 TaskDateTime（含連動）
                 var cancelList = new List<string> { taskDateTime };
 
-                if (targetMission != null)
+                if (!string.IsNullOrEmpty(parentTdt))
                 {
-                    if (!string.IsNullOrEmpty(targetMission.ParentTaskDateTime))
-                    {
-                        // 被取消的是預調度 → 連動取消其 MCS 父任務（MCS 先取消）
-                        cancelList.Insert(0, targetMission.ParentTaskDateTime);
-                    }
-
-                    // 查詢以此任務為 Parent 的預調度任務（被取消的是 MCS → 連動取消預調度）
-                    var childTasks = _DBContext.oMission
-                        .Where(m => m.ParentTaskDateTime == taskDateTime)
-                        .Select(m => m.TaskDateTime)
-                        .ToList();
-                    foreach (var childTDT in childTasks)
-                    {
-                        if (!cancelList.Contains(childTDT))
-                            cancelList.Add(childTDT);
-                    }
+                    // 被取消的是子任務（跨樓層預調度 / 空平板回收 O→Q）→ 連動取消其父任務（父先取消）
+                    cancelList.Insert(0, parentTdt);
                 }
 
-                // 依序取消所有關聯任務（MCS 優先）
+                // 查詢以此任務為 Parent 的子任務（被取消的是父任務 → 連動取消子任務）
+                var childTasks = _DBContext.oMission
+                    .Where(m => m.ParentTaskDateTime == taskDateTime)
+                    .Select(m => m.TaskDateTime)
+                    .ToList();
+                foreach (var childTDT in childTasks)
+                {
+                    if (!string.IsNullOrEmpty(childTDT) && !cancelList.Contains(childTDT))
+                        cancelList.Add(childTDT);
+                }
+
+                // 依序取消所有關聯任務（父任務優先）
                 foreach (var tdt in cancelList)
                 {
                     _DBContext.oMission
@@ -316,6 +323,13 @@ namespace SCP.Controllers
                     _DBContext.oRequire
                         .Where(r => r.TaskDateTime == tdt)
                         .ExecuteUpdate(setters => setters.SetProperty(r => r.OkFlag, "C"));
+
+                    // ★ 清源頭：卡控中的 M→O 物料任務只存在於 oNeed（未轉 oRequire/oMission），
+                    //   標 AssignFlag='C' 交由 svrPair RecyclingoNeedByAssignFlag 刪除，
+                    //   斷掉「取消後主迴圈重掃 oNeed 又生空平板回收任務」的源頭。
+                    _DBContext.oNeed
+                        .Where(n => n.TaskDateTime == tdt)
+                        .ExecuteUpdate(setters => setters.SetProperty(n => n.AssignFlag, "C"));
                 }
 
                 transaction.Commit();
