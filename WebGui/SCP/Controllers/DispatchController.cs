@@ -244,7 +244,7 @@ namespace SCP.Controllers
             }
             catch (Exception ex)
             {
-
+                Console.WriteLine($"[InsertoNeed] 寫入 oNeed 失敗：ObjStation={objStation}, EndStation={endStation}, Error={ex.Message}");
             }
 
             return Ok();
@@ -265,7 +265,7 @@ namespace SCP.Controllers
             }
             catch (Exception ex)
             {
-
+                Console.WriteLine($"[UpdateoPort] 更新 oPort 失敗：StationNo={objStation}, Error={ex.Message}");
             }
 
             return Ok();
