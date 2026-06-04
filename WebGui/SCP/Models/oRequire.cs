@@ -24,4 +24,7 @@ public partial class oRequire
     public string? AssignFlag { get; set; }
 
     public string? OkFlag { get; set; }
+
+    /// <summary>由 oNeed 帶下的父任務關聯(M→O TaskDateTime)，供 SCP 取消空平板任務時反查源頭；一般任務為 null。</summary>
+    public string? ParentTaskDateTime { get; set; }
 }
