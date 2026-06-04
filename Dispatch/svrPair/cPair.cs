@@ -430,6 +430,7 @@ namespace svrPair
             string WorkOrder = dr["WorkOrder"].ToString(); string ObjStation = dr["ObjStation"].ToString();
             string RackId = dr["RackId"].ToString(); string EndStation = dr["EndStation"].ToString();
             string TaskDateTime = dr["TaskDateTime"].ToString();
+            string ParentTdt = SafeCol(dr, "ParentTaskDateTime");   // 空平板回收(O→Q)帶觸發它的 M→O 任務時間；一般任務為空
 
             if (dr["WorkOrder"].ToString().Trim() == "")
             {
@@ -461,9 +462,10 @@ namespace svrPair
             else
             {
                 mSql.WriteSqlByAutoOpen(
-                    "insert into oRequire(TaskDateTime, ObjStation, SerialNo, BeginStation, EndStation, TaskSource, RackId, WorkOrder) " +
-                    "values(@td, @obj, 0, @obj, @end, 'MCS', @rack, @wo)",
-                    SP("@td", TaskDateTime), SP("@obj", ObjStation), SP("@end", EndStation), SP("@rack", RackId), SP("@wo", WorkOrder));
+                    "insert into oRequire(TaskDateTime, ObjStation, SerialNo, BeginStation, EndStation, TaskSource, RackId, WorkOrder, ParentTaskDateTime) " +
+                    "values(@td, @obj, 0, @obj, @end, 'MCS', @rack, @wo, @ptd)",
+                    SP("@td", TaskDateTime), SP("@obj", ObjStation), SP("@end", EndStation), SP("@rack", RackId), SP("@wo", WorkOrder),
+                    SP("@ptd", string.IsNullOrEmpty(ParentTdt) ? null : ParentTdt));
                 WriteLog(string.Format("09.產生oRequire >> oNeed -> oRequire , TaskDateTime : {0} , BeginStation : {1} , EndStation : {2} , WorkOrder : {3}", TaskDateTime, ObjStation, EndStation, WorkOrder));
 
                 UpdateoNeedAssignFlag("Y", ObjStation, EndStation);
@@ -590,10 +592,12 @@ namespace svrPair
             DataTable dt = mSql.QuerySqlByAutoOpen("select * from oMission where BeginStation = @bgn and EndStation = @end", SP("@bgn", dr["BeginStation"].ToString()), SP("@end", dr["EndStation"].ToString())).Tables[0];
             if (dt.Rows.Count == 0)
             {
+                string parentTdt = SafeCol(dr, "ParentTaskDateTime");   // 由 oRequire 帶下；空平板回收任務才有值，一般任務為空
                 mSql.WriteSqlByAutoOpen(
-                    "Insert into oMission(TaskDateTime, SerialNo, BeginStation, EndStation, TaskSource, ShuttleId, RackId, WorkOrder) " +
-                    "values(@td, 0, @bgn, @end, 'MCS', 0, @rack, @wo)",
-                    SP("@td", dr["TaskDateTime"].ToString()), SP("@bgn", dr["BeginStation"].ToString()), SP("@end", dr["EndStation"].ToString()), SP("@rack", dr["RackId"].ToString()), SP("@wo", dr["WorkOrder"].ToString()));
+                    "Insert into oMission(TaskDateTime, SerialNo, BeginStation, EndStation, TaskSource, ShuttleId, RackId, WorkOrder, ParentTaskDateTime) " +
+                    "values(@td, 0, @bgn, @end, 'MCS', 0, @rack, @wo, @ptd)",
+                    SP("@td", dr["TaskDateTime"].ToString()), SP("@bgn", dr["BeginStation"].ToString()), SP("@end", dr["EndStation"].ToString()), SP("@rack", dr["RackId"].ToString()), SP("@wo", dr["WorkOrder"].ToString()),
+                    SP("@ptd", string.IsNullOrEmpty(parentTdt) ? null : parentTdt));
                 rslt = true;
             }
             return rslt;
@@ -727,12 +731,27 @@ namespace svrPair
                 rackId = dtRack.Rows[0]["RackId"].ToString().Trim();
             }
 
-            mSql.WriteSqlByAutoOpen(
-                "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag) " +
-                "VALUES(@obj, @rack, '', @target, 'PLATE_RECOVERY', @td, '')",
-                SP("@obj", endStation), SP("@rack", rackId), SP("@target", recoveryTarget), SP("@td", GetTaskDateTimeIncludeRandom(true)));
+            // ★ race 防護：產生 O→Q 前重查父 M→O oNeed 是否仍有效（未被 SCP 取消標記）。
+            //   SCP 取消會把父 oNeed 標 AssignFlag='C'；若本輪迴圈以快照取得父任務後、
+            //   才被另一程序取消，這裡重查可避免對已取消的父任務再生一張空平板回收 oNeed，
+            //   斷掉「取消後重複觸發」的最後一個極小空窗。
+            string parentTaskDateTime = dr["TaskDateTime"].ToString();
+            DataTable dtParentAlive = mSql.QuerySqlByAutoOpen(
+                "SELECT 1 FROM oNeed WHERE TaskDateTime = @ptd AND (AssignFlag IS NULL OR RTRIM(AssignFlag) = '')",
+                SP("@ptd", parentTaskDateTime)).Tables[0];
+            if (dtParentAlive.Rows.Count == 0)
+            {
+                WriteLog(string.Format("05A.空平板卡控 >> 父任務 {0}→{1} (TaskDateTime={2}) 已取消或不存在，跳過產生空平板回收 oNeed",
+                    objStation, endStation, parentTaskDateTime));
+                return true;
+            }
 
-            WriteLog(string.Format("05A.空平板卡控 >> 產生空平板回收 oNeed: {0} → {1}", endStation, recoveryTarget));
+            mSql.WriteSqlByAutoOpen(
+                "INSERT INTO oNeed(ObjStation, RackId, WorkOrder, EndStation, TaskSource, TaskDateTime, AssignFlag, ParentTaskDateTime) " +
+                "VALUES(@obj, @rack, '', @target, 'PLATE_RECOVERY', @td, '', @ptd)",
+                SP("@obj", endStation), SP("@rack", rackId), SP("@target", recoveryTarget), SP("@td", GetTaskDateTimeIncludeRandom(true)), SP("@ptd", parentTaskDateTime));
+
+            WriteLog(string.Format("05A.空平板卡控 >> 產生空平板回收 oNeed: {0} → {1} (Parent={2})", endStation, recoveryTarget, parentTaskDateTime));
             return true; // 卡住物料 oNeed，等回收完成後下一輪再處理
         }
         #endregion
