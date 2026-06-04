@@ -733,8 +733,10 @@ namespace svrPair
 
             // ★ race 防護：產生 O→Q 前重查父 M→O oNeed 是否仍有效（未被 SCP 取消標記）。
             //   SCP 取消會把父 oNeed 標 AssignFlag='C'；若本輪迴圈以快照取得父任務後、
-            //   才被另一程序取消，這裡重查可避免對已取消的父任務再生一張空平板回收 oNeed，
-            //   斷掉「取消後重複觸發」的最後一個極小空窗。
+            //   才被另一程序取消，這裡重查可大幅縮小「對已取消父任務再生 O→Q」的空窗。
+            //   註：重查與下方 INSERT 為兩次獨立連線、非單一交易，且 svrPair 與 SCP 不同程序，
+            //   故仍殘留極小空窗——萬一此時插入孤兒 O→Q，因父 oNeed 已是 'C' 會被
+            //   RecyclingoNeedByAssignFlag 清掉，孤兒 O→Q 則照常派送，不會無限重生。
             string parentTaskDateTime = dr["TaskDateTime"].ToString();
             DataTable dtParentAlive = mSql.QuerySqlByAutoOpen(
                 "SELECT 1 FROM oNeed WHERE TaskDateTime = @ptd AND (AssignFlag IS NULL OR RTRIM(AssignFlag) = '')",
