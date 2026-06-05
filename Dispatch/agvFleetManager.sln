@@ -4,9 +4,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.14.36705.20 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "svrPair", "svrPair\svrPair.csproj", "{2B91AAA1-B4E3-46C0-8136-0AADA5B9AAFA}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C173BFFE-F36F-4973-8607-0118B5A6D147} = {C173BFFE-F36F-4973-8607-0118B5A6D147}
-	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cTest", "cTest\cTest.csproj", "{C173BFFE-F36F-4973-8607-0118B5A6D147}"
 EndProject
