@@ -713,6 +713,11 @@ $(function () {
         }
 
         if (!allValid) {
+            // 卡控失敗後，若此區域終點原本開放人工手選（C / M一般 / T / MT一般或已完成），
+            // 恢復終點為可選狀態，讓使用者可直接改選其他終點，毋須重新選擇起點才能解鎖。
+            if (isEndStationManuallySelectable(area, beginStation)) {
+                $("#EndStation").prop("disabled", false);
+            }
             return;
         }
 
@@ -853,6 +858,14 @@ $(function () {
                 if (confirmModal) confirmModal.hide();
                 var rejectModal = bootstrap.Modal.getInstance($('#RejectModalToggle'));
                 if (rejectModal) rejectModal.hide();
+
+                // 派車送出後遭後端業務卡控退回時，若該區域終點原本開放人工手選，
+                // 恢復終點為可選狀態，讓使用者可直接改選其他終點，毋須重新選擇起點解鎖。
+                var beginStation = $("#BeginStation").val();
+                if (isEndStationManuallySelectable(area, beginStation)) {
+                    $("#EndStation").prop("disabled", false);
+                }
+
                 if (error.responseJSON && error.responseJSON.message) { alert("派送失敗:" + error.responseJSON.message) }
 
             }
@@ -1913,6 +1926,23 @@ function filterBeginStationByDestination(destinationArea) {
             return workOrder.includes("^VCUT^DONE");
         }).show();
     }
+}
+
+/**
+ * 判斷指定區域的終點是否開放人工手選（多候選站點）。
+ * 開放手選：C 區、T 區、M/MT 區一般或已完成物料。
+ * 鎖定（自動帶出）：A/D/H/Q/R/J/G/L/I 等一對一固定路線、以及 M/MT 區 V Cut 待加工物料。
+ */
+function isEndStationManuallySelectable(area, beginStation) {
+    if (area === "C" || area === "T") return true;
+    if (area === "M" || area === "MT") {
+        var st = stationCache[beginStation];
+        var wo = (st && st.workOrder) || "";
+        // V Cut 待加工物料：終點自動鎖定 T 區，不可手選
+        var isVcutPending = wo.includes("^VCUT") && !wo.includes("^VCUT^DONE");
+        return !isVcutPending;
+    }
+    return false;
 }
 
 /**
