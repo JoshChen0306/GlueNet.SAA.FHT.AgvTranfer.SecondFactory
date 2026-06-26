@@ -106,16 +106,32 @@ namespace SCP.Controllers
                 .First()) // 從每組中取出第一筆記錄
                 .ToList();
 
+            // 防呆：ubMission 的 BeginTime/EndTime 為可空字串，現場可能出現 null、空字串、
+            // 長度不足 12 碼（未完成/取消任務）或格式異常的列。任一壞列若直接 Substring/ParseExact
+            // 會整批拋例外造成 API 回 500，故先過濾長度、再用 TryParseExact 解析，解析失敗的列略過。
             var data = missions
-               .Select(m => new
+               .Select(m =>
                {
-                   Date = DateTime.ParseExact(m.EndTime.Substring(0, 8), "yyyyMMdd", CultureInfo.InvariantCulture),
-                   WorkOrder = m.WorkOrder,
-                   BeginStation = m.BeginStation,
-                   EndStation = m.EndStation,
-                   BeginTime = DateTime.ParseExact(m.BeginTime.Substring(8, 4), "HHmm", CultureInfo.InvariantCulture),
-                   EndTime = DateTime.ParseExact(m.EndTime.Substring(8, 4), "HHmm", CultureInfo.InvariantCulture),
+                   if (string.IsNullOrEmpty(m.BeginTime) || m.BeginTime.Length < 12
+                       || string.IsNullOrEmpty(m.EndTime) || m.EndTime.Length < 12)
+                       return null;
+
+                   if (!DateTime.TryParseExact(m.EndTime.Substring(0, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                       || !DateTime.TryParseExact(m.BeginTime.Substring(8, 4), "HHmm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var beginTime)
+                       || !DateTime.TryParseExact(m.EndTime.Substring(8, 4), "HHmm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var endTime))
+                       return null;
+
+                   return new
+                   {
+                       Date = date,
+                       WorkOrder = m.WorkOrder,
+                       BeginStation = m.BeginStation,
+                       EndStation = m.EndStation,
+                       BeginTime = beginTime,
+                       EndTime = endTime,
+                   };
                })
+               .Where(x => x != null)
                .ToList();
 
             foreach (var shiftTime in shifts)
