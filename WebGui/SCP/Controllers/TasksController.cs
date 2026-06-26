@@ -82,7 +82,11 @@ namespace SCP.Controllers
             DateTime dtEnd = DateTime.ParseExact(endDate, "yyyyMMdd", CultureInfo.InvariantCulture).AddDays(1);
             List<TaskReport> missionData = new List<TaskReport>();
 
-            string shuttleName = shuttleId == 0 ? "所有車輛" : _DBContext.oShuttle.Where(s => s.ShuttleId == shuttleId).FirstOrDefault().GustomerName;
+            // 防呆：若選定車輛未登錄於 oShuttle（如二廠新車漏登錄/ID 對不上），
+            // 原本 FirstOrDefault().GustomerName 會 NullReference 造成整支 API 回 500。
+            // 改為安全取值，找不到時退回顯示「車輛{id}」，不阻斷查詢。
+            var shuttle = _DBContext.oShuttle.FirstOrDefault(s => s.ShuttleId == shuttleId);
+            string shuttleName = shuttleId == 0 ? "所有車輛" : (shuttle?.GustomerName ?? $"車輛{shuttleId}");
 
             var missions = _DBContext.ubMission
                 .Where(item => item.BeginTime.Substring(0, 8).CompareTo(startDate) >= 0
