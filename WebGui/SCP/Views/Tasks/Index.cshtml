@@ -17,8 +17,10 @@
                 <label for="dateInput" class="col-2 text-secondary">@Localizer["SearchAGV"]:</label>
                 <select class="form-select w-50" id="ShuttleId">
                     <option value="">@Localizer["Choose"]</option>
-                    <option value="1">AGV-1</option>
-                    <option value="2">AGV-2</option>
+                    @foreach (var s in (IEnumerable<SCP.Models.oShuttle>)(ViewBag.Shuttles ?? new List<SCP.Models.oShuttle>()))
+                    {
+                        <option value="@s.ShuttleId">@(string.IsNullOrEmpty(s.GustomerName) ? $"車輛{s.ShuttleId}" : s.GustomerName)</option>
+                    }
                 </select>
             </div>
         </div>

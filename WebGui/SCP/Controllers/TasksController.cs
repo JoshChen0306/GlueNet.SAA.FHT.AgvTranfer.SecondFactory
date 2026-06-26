@@ -16,6 +16,17 @@ namespace SCP.Controllers
         }
         public IActionResult Index()
         {
+            try
+            {
+                // 車輛下拉選單改為從 oShuttle 動態載入，取代原本寫死的 AGV-1/AGV-2，
+                // 讓二廠 3F/4F 新車也能被查詢。
+                ViewBag.Shuttles = _DBContext.oShuttle.OrderBy(s => s.ShuttleId).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "載入車輛下拉選單(oShuttle)失敗，下拉將只剩「請選擇」");
+                ViewBag.Shuttles = new List<oShuttle>();
+            }
             return View();
         }
 
