@@ -8,9 +8,11 @@ namespace SCP.Controllers
     public class TasksController : Controller
     {
         private readonly agvDB_1400004Context _DBContext;
-        public TasksController(agvDB_1400004Context DBContext)
+        private readonly ILogger<TasksController> _logger;
+        public TasksController(agvDB_1400004Context DBContext, ILogger<TasksController> logger)
         {
             _DBContext = DBContext;
+            _logger = logger;
         }
         public IActionResult Index()
         {
@@ -19,59 +21,83 @@ namespace SCP.Controllers
 
         public IActionResult GetMission(string startDate, string endDate, int shuttleId, string shiftId)
         {
-           
-            var missions = GetSearchData(startDate, endDate, shuttleId, shiftId);
-            ViewBag.Missions = missions
-                .GroupBy(item => item.Date)
-                .Select(group => new 
-                {
-                    Date = group.Key.ToString("MM/dd"),
-                    ShuttleName = group.First().AGV,
-                    DayShift = group.Where(i => i.ShiftName == "早班").Count().ToString(),
-                    NightShift = group.Where(i => i.ShiftName == "晚班").Count().ToString(),
-                    Total = group.Count().ToString()
-                })
-                .OrderBy(item => item.Date);
+            try
+            {
+                var missions = GetSearchData(startDate, endDate, shuttleId, shiftId);
+                ViewBag.Missions = missions
+                    .GroupBy(item => item.Date)
+                    .Select(group => new
+                    {
+                        Date = group.Key.ToString("MM/dd"),
+                        ShuttleName = group.First().AGV,
+                        DayShift = group.Where(i => i.ShiftName == "早班").Count().ToString(),
+                        NightShift = group.Where(i => i.ShiftName == "晚班").Count().ToString(),
+                        Total = group.Count().ToString()
+                    })
+                    .OrderBy(item => item.Date);
 
-            return PartialView("_TaskDataPartial");
+                return PartialView("_TaskDataPartial");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetMission failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}, shiftId={ShiftId}", startDate, endDate, shuttleId, shiftId);
+                ViewBag.Missions = Enumerable.Empty<object>();
+                return PartialView("_TaskDataPartial");
+            }
         }
 
         public IActionResult GetBarChat(string startDate, string endDate, int shuttleId, string shiftId)
         {
-     
-            var missions = GetSearchData(startDate, endDate, shuttleId, shiftId); 
-            var results = missions
-                .GroupBy(item => new {item.Date ,item.ShiftName })
-                .Select(group => new
-                {
-                    Date = group.Key.Date,
-                    ShiftName = group.Key.ShiftName,
-                    Count = group.Count()
-                })
-                .OrderBy(item => item.Date);
+            try
+            {
+                var missions = GetSearchData(startDate, endDate, shuttleId, shiftId);
+                var results = missions
+                    .GroupBy(item => new { item.Date, item.ShiftName })
+                    .Select(group => new
+                    {
+                        Date = group.Key.Date,
+                        ShiftName = group.Key.ShiftName,
+                        Count = group.Count()
+                    })
+                    .OrderBy(item => item.Date);
 
-            return Json(results);
+                return Json(results);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetBarChat failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}, shiftId={ShiftId}", startDate, endDate, shuttleId, shiftId);
+                return Json(Enumerable.Empty<object>());
+            }
         }
 
         public IActionResult GetTasks(string startDate, string endDate, int shuttleId, string shiftId)
         {
-            var missions = GetSearchData(startDate, endDate, shuttleId, shiftId);
-            ViewBag.Tasks = missions         
-                .Select(item => new 
-                {
-                    Date = item.Date.ToString("MM/dd"),
-                    AGV = item.AGV,
-                    ShiftName = item.ShiftName,
-                    WorkOrder = item.WorkOrder,
-                    BeginStation = item.BeginStation,
-                    EndStation = item.EndStation,
-                    BeginTime = item.BeginTime,
-                    EndTime = item.EndTime,
-                    TotalTime = item.TotalTime
-                })
-                .OrderBy(item => item.Date);
+            try
+            {
+                var missions = GetSearchData(startDate, endDate, shuttleId, shiftId);
+                ViewBag.Tasks = missions
+                    .Select(item => new
+                    {
+                        Date = item.Date.ToString("MM/dd"),
+                        AGV = item.AGV,
+                        ShiftName = item.ShiftName,
+                        WorkOrder = item.WorkOrder,
+                        BeginStation = item.BeginStation,
+                        EndStation = item.EndStation,
+                        BeginTime = item.BeginTime,
+                        EndTime = item.EndTime,
+                        TotalTime = item.TotalTime
+                    })
+                    .OrderBy(item => item.Date);
 
-            return PartialView("_TaskDetialPartial");
+                return PartialView("_TaskDetialPartial");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetTasks failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}, shiftId={ShiftId}", startDate, endDate, shuttleId, shiftId);
+                ViewBag.Tasks = Enumerable.Empty<object>();
+                return PartialView("_TaskDetialPartial");
+            }
         }
 
         private List<TaskReport> GetSearchData(string startDate, string endDate, int shuttleId ,string shiftId)
