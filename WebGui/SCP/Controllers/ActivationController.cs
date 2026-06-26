@@ -9,61 +9,110 @@ namespace SCP.Controllers
     public class ActivationController : Controller
     {
         private readonly agvDB_1400004Context _DBContext;
+        private readonly ILogger<ActivationController> _logger;
 
-        public ActivationController(agvDB_1400004Context DBContext)
+        private const string ActTimeFormat = "yyyyMMddHHmmssffffff";
+
+        public ActivationController(agvDB_1400004Context DBContext, ILogger<ActivationController> logger)
         {
             _DBContext = DBContext;
+            _logger = logger;
         }
         public IActionResult Index()
         {
+            try
+            {
+                // 車輛下拉選單改為從 oShuttle 動態載入，取代寫死的 AGV-1/AGV-2。
+                ViewBag.Shuttles = _DBContext.oShuttle.OrderBy(s => s.ShuttleId).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "載入車輛下拉選單(oShuttle)失敗，下拉將只剩「請選擇」");
+                ViewBag.Shuttles = new List<oShuttle>();
+            }
             return View();
         }
 
         public IActionResult GetPieActivation(string startDate, string endDate, string shuttleId)
         {
-            double totalHours = GetTotalHours(startDate, endDate);
-            var data = GetSearchData(startDate, endDate, shuttleId);
-            var result = GetPie(data, totalHours);
+            try
+            {
+                double totalHours = GetTotalHours(startDate, endDate);
+                var data = GetSearchData(startDate, endDate, shuttleId);
+                var result = GetPie(data, totalHours);
 
-            return Json(result);
+                return Json(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetPieActivation failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}", startDate, endDate, shuttleId);
+                return Json(Enumerable.Empty<object>());
+            }
         }
         public IActionResult GetBarActivation(string startDate, string endDate, string shuttleId)
         {
-            double totalHours = GetTotalHours(startDate, endDate);
-            var data = GetSearchData(startDate, endDate, shuttleId);
-            var result = GetBar(data, totalHours);
+            try
+            {
+                double totalHours = GetTotalHours(startDate, endDate);
+                var data = GetSearchData(startDate, endDate, shuttleId);
+                var result = GetBar(data, totalHours);
 
-            return Json(result);
+                return Json(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetBarActivation failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}", startDate, endDate, shuttleId);
+                return Json(Enumerable.Empty<object>());
+            }
         }
 
         public IActionResult GetTaskTable(string startDate, string endDate, string shuttleId)
         {
-            var data = GetSearchData(startDate, endDate, shuttleId);
-            double totalHours = GetTotalHours(startDate, endDate);
+            try
+            {
+                var data = GetSearchData(startDate, endDate, shuttleId);
+                double totalHours = GetTotalHours(startDate, endDate);
 
-            ViewBag.Activation = GetPie(data, totalHours);
-            ViewBag.TotalActivation = data
-               .Select(item => new
-               {
-                   item.TaskType,
-                   BeginTime = DateTime.ParseExact(item.BeginTime, "yyyyMMddHHmmssffffff", CultureInfo.InvariantCulture),
-                   EndTime = DateTime.ParseExact(item.EndTime, "yyyyMMddHHmmssffffff", CultureInfo.InvariantCulture),
-               })
-               .GroupBy(item => new { item.TaskType })
-               .Select(group =>
-               
-                   Math.Round(Math.Round(group.Where(item => item.TaskType == "R").Sum(item => (item.EndTime - item.BeginTime).TotalHours), 2) / (totalHours) * 100, 2)
-               ).FirstOrDefault().ToString("0.00");
-            return PartialView("_ActivationPartial");
+                ViewBag.Activation = GetPie(data, totalHours);
+                ViewBag.TotalActivation = data
+                   .Select(item => new
+                   {
+                       item.TaskType,
+                       BeginTime = DateTime.ParseExact(item.BeginTime, ActTimeFormat, CultureInfo.InvariantCulture),
+                       EndTime = DateTime.ParseExact(item.EndTime, ActTimeFormat, CultureInfo.InvariantCulture),
+                   })
+                   .GroupBy(item => new { item.TaskType })
+                   .Select(group =>
+
+                       Math.Round(Math.Round(group.Where(item => item.TaskType == "R").Sum(item => (item.EndTime - item.BeginTime).TotalHours), 2) / (totalHours) * 100, 2)
+                   ).FirstOrDefault().ToString("0.00");
+                return PartialView("_ActivationPartial");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetTaskTable failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}", startDate, endDate, shuttleId);
+                ViewBag.Activation = new List<ActivationReport>();
+                ViewBag.TotalActivation = "0.00";
+                return PartialView("_ActivationPartial");
+            }
         }
 
         public IActionResult GetDetailTable(string startDate, string endDate, string shuttleId)
         {
-            var data = GetSearchData(startDate, endDate, shuttleId);
-            double totalHours = GetTotalHours(startDate, endDate);
+            try
+            {
+                var data = GetSearchData(startDate, endDate, shuttleId);
+                double totalHours = GetTotalHours(startDate, endDate);
 
-            ViewBag.Activation = GetBar(data, totalHours);   
-            return PartialView("_ActivationPartial");
+                ViewBag.Activation = GetBar(data, totalHours);
+                return PartialView("_ActivationPartial");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetDetailTable failed. startDate={StartDate}, endDate={EndDate}, shuttleId={ShuttleId}", startDate, endDate, shuttleId);
+                ViewBag.Activation = new List<ActivationReport>();
+                return PartialView("_ActivationPartial");
+            }
         }
 
         private List<ubActivation> GetSearchData(string startDate, string endDate, string shuttleId)
@@ -75,6 +124,12 @@ namespace SCP.Controllers
                 && item.BeginTime.CompareTo(endTime) <= 0
                 && (string.IsNullOrEmpty(shuttleId) || item.ShuttleId == shuttleId)
                 && !string.IsNullOrEmpty(item.EndTime))
+                .ToList()
+                // 防呆：ubActivation 含 ShuttleId='AGV_001'/空字串等雜資料，BeginTime/EndTime
+                // 可能非預期格式。先用 TryParseExact 濾掉解析不過的列，避免下游 GetPie/GetBar/
+                // GetTaskTable 的 ParseExact 對單筆壞列拋例外造成整頁 500。
+                .Where(item => DateTime.TryParseExact(item.BeginTime, ActTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
+                            && DateTime.TryParseExact(item.EndTime, ActTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                 .ToList();
 
 
