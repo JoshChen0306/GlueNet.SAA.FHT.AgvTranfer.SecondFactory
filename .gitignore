@@ -348,3 +348,5 @@ ASALocalRun/
 
 # bash.exe crash dumps
 *.stackdump
+
+/Doc
