@@ -1597,41 +1597,61 @@ function filterBeginStationOptions(selectedValue) {
     switch (selectedValue.substring(0, 1)) {
         case "C":
             // C 區：只顯示 B 區且 HaveFlag = 3 的站點
-            $('#BeginStation option').filter(function () {
-                var tracname = $(this).val();
-                if (!tracname) return false;
+            if (window.enableB2CFifo === true) {
+                // 先進先出（FIFO）卡控：同一料號只顯示 PutTime 最早的一盤（隱藏開關，預設關閉）
+                $('#BeginStation option').filter(function () {
+                    var tracname = $(this).val();
+                    if (!tracname) return false;
 
-                var station = stationCache[tracname];
-                if (!station) return false;
+                    var station = stationCache[tracname];
+                    if (!station) return false;
 
-                if (tracname.charAt(0) !== "B" || station.haveFlag != 3) return false;
+                    if (tracname.charAt(0) !== "B" || station.haveFlag != 3) return false;
 
-                var haveflag = station.haveFlag;
-                var workorder = (station.workOrder && station.workOrder.split("^")[3]) || "undefined";
-                var lot = (station.workOrder && station.workOrder.split("^")[2]) || "undefined";
-                var puttime = station.putTime;
+                    var haveflag = station.haveFlag;
+                    var workorder = (station.workOrder && station.workOrder.split("^")[3]) || "undefined";
+                    var lot = (station.workOrder && station.workOrder.split("^")[2]) || "undefined";
+                    var puttime = station.putTime;
 
-                if (tracname.startsWith("B") && haveflag === "3") {
-                    if (!workoderMap.has(workorder) || puttime < workoderMap.get(workorder).puttime) {
-                        workoderMap.set(workorder, { tracname, lot, puttime });
+                    if (tracname.startsWith("B") && haveflag === "3") {
+                        if (!workoderMap.has(workorder) || puttime < workoderMap.get(workorder).puttime) {
+                            workoderMap.set(workorder, { tracname, lot, puttime });
+                        }
+                        return true;
                     }
-                    return true;
-                }
-                return false;
-            }).each(function () {
-                var tracname = $(this).val();
-                var station = stationCache[tracname];
-                if (!station) return;
+                    return false;
+                }).each(function () {
+                    var tracname = $(this).val();
+                    var station = stationCache[tracname];
+                    if (!station) return;
 
-                var workorder = (station.workOrder && station.workOrder.split("^")[3]) || "undefined";
-                if (workoderMap.has(workorder) && workoderMap.get(workorder).tracname === tracname) {
-                    var lot = workoderMap.get(workorder).lot;
+                    var workorder = (station.workOrder && station.workOrder.split("^")[3]) || "undefined";
+                    if (workoderMap.has(workorder) && workoderMap.get(workorder).tracname === tracname) {
+                        var lot = workoderMap.get(workorder).lot;
+                        $(this).text(`${tracname}-${workorder}-${lot}`);
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
+            } else {
+                // 方案 A（預設）：不做 FIFO 卡控，B 區所有 HaveFlag = 3 站點全顯示、全可選
+                $('#BeginStation option').filter(function () {
+                    var tracname = $(this).val();
+                    if (!tracname) return false;
+
+                    var station = stationCache[tracname];
+                    if (!station) return false;
+
+                    if (tracname.charAt(0) !== "B" || station.haveFlag != 3) return false;
+
+                    var parts = (station.workOrder && station.workOrder.split("^")) || [];
+                    var workorder = parts[3] || "undefined";
+                    var lot = parts[2] || "undefined";
                     $(this).text(`${tracname}-${workorder}-${lot}`);
-                    $(this).show();
-                } else {
-                    $(this).hide();
-                }
-            });
+                    return true;
+                }).show();
+            }
             break;
         case "H":  // H 區（成型後）作為起點：只顯示有料的站點 (HaveFlag = 3)
             $('#BeginStation option').filter(function () {

@@ -134,6 +134,10 @@ namespace SCP.Controllers
             // 物料登記畫面是否顯示「貨架條碼」欄位（預設 true 顯示；關閉時前端隱藏欄位、送出固定帶 -1 哨兵值通過後端必填驗證）
             ViewBag.ShowRackIdField = _configuration.GetValue("MyConfig:ShowRackIdField", true);
 
+            // 1F B→C 起點下拉是否啟用先進先出（FIFO）卡控（預設 false 放開；隱藏開關，客戶端設定檔不寫此 key 即為 false）
+            // true 時同料號只顯示 PutTime 最早一盤；false 時 B 區所有 HaveFlag=3 站點全顯示
+            ViewBag.EnableB2CFifo = _configuration.GetValue("MyConfig:EnableB2CFifo", false);
+
             return View();
         }
 
