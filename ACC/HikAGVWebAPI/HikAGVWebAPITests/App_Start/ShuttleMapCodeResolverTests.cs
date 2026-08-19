@@ -87,6 +87,11 @@ namespace HikAGVWebAPITests.App_Start
             StringAssert.Contains(result.ConflictDetail, "BB");
             StringAssert.Contains(result.ConflictDetail, "DD");
             StringAssert.Contains(result.ConflictDetail, "500");
+            // 各筆的判定結果（有變動／凍結）與勝出原因都要在描述裡，
+            // 否則現場翻 WARN log 只看得到「有衝突」卻不知道為什麼選了這一筆
+            StringAssert.Contains(result.ConflictDetail, "座標凍結");
+            StringAssert.Contains(result.ConflictDetail, "座標有變動");
+            StringAssert.Contains(result.ConflictDetail, "勝出=BB");
         }
 
         #endregion Happy Path
