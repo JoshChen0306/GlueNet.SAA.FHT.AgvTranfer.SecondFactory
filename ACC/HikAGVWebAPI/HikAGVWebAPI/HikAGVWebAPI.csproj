@@ -98,6 +98,7 @@
     <Compile Include="App_Start\CrossFloorManager.cs" />
     <Compile Include="App_Start\Dispatch.cs" />
     <Compile Include="App_Start\ElevatorPathCalculator.cs" />
+    <Compile Include="App_Start\ShuttleMapCodeResolver.cs" />
     <Compile Include="App_Start\WebApiConfig.cs" />
     <Compile Include="Controllers\HikAGVController.cs" />
     <Compile Include="Formatter.cs" />
