@@ -270,8 +270,7 @@ namespace HikAGVWebAPI.App_Start
             try
             {
                 // 系統任務（已寫入 oMission 尚未派發）直接回傳讓 Dispatch 送出
-                var systemTask = crossFloorPending.FirstOrDefault(
-                    m => m.TaskSource == CROSS_FLOOR_DISPATCH || m.TaskSource == IDLE_RETURN);
+                var systemTask = FindSystemTask(crossFloorPending);
                 if (systemTask != null)
                     return systemTask;
 
@@ -282,30 +281,65 @@ namespace HikAGVWebAPI.App_Start
                 oShuttleModel shuttle = GetShuttleStatus();
                 if (shuttle == null) return null;
 
-                string currentFloor = GetFloorByMapCode(shuttle.MapCode);
-
-                var decision = DecideNextCrossFloorAction(crossFloorPending, currentFloor, _pathCalculator, _cooldownTracker);
-                switch (decision.Kind)
-                {
-                    case CrossFloorDecisionKind.None:
-                        return null;
-                    case CrossFloorDecisionKind.SameFloor:
-                        _mLog.TraceOut($"[CrossFloor] 同樓層任務優先派發：{decision.Task.BeginStation}→{decision.Task.EndStation}", Log.LogType.NONE);
-                        return decision.Task;
-                    case CrossFloorDecisionKind.CooldownHit:
-                        _mLog.TraceOut($"[CrossFloor] 冷卻期命中，攔截預調度重派 parent={decision.Task.TaskDateTime}，回傳父任務讓 Dispatch 正常處理", Log.LogType.NONE);
-                        return decision.Task;
-                    case CrossFloorDecisionKind.NeedDispatch:
-                        return DispatchCrossFloor(decision.FromFloor, decision.ToFloor, decision.Task.TaskDateTime);
-                    default:
-                        return null;
-                }
+                return SelectNextMissionForFloor(crossFloorPending, GetFloorByMapCode(shuttle.MapCode), shuttle.MapCode);
             }
             catch (Exception ex)
             {
                 _mLog.TraceOut($"[CrossFloor] SelectNextMission Exception: {ex.Message}", Log.LogType.NONE);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 給定車輛所在樓層後的派發選擇。自 SelectNextMission 抽出，
+        /// 使「樓層不可信」的判斷可在不依賴 SQLData 的情況下單元測試。
+        ///
+        /// 樓層取不到（MapCode 為空或不在 MapCodeFloorMapping 對照表）時一律不派發：
+        /// 跨樓層任務晚一輪派沒有代價，派錯樓層則 RCS 找不到車可指派，
+        /// 任務會卡在 OkFlag=R 直到人工取消（2026-08-19 客訴即為此情形，卡了 19 分鐘）。
+        /// </summary>
+        /// <param name="crossFloorPending">待派發的跨樓層任務</param>
+        /// <param name="currentFloor">車輛目前樓層；null/空字串代表無法判定</param>
+        /// <param name="mapCodeForLog">記錄於 log 的 MapCode 原值，僅供診斷</param>
+        public oMissionModel SelectNextMissionForFloor(
+            List<oMissionModel> crossFloorPending,
+            string currentFloor,
+            string mapCodeForLog = null)
+        {
+            // 系統任務已寫入 oMission，與車輛樓層可信度無關，照常送出
+            var systemTask = FindSystemTask(crossFloorPending);
+            if (systemTask != null)
+                return systemTask;
+
+            if (string.IsNullOrEmpty(currentFloor))
+            {
+                _mLog?.TraceOut($"[CrossFloor] 車輛 {_shuttleId} 樓層無法判定（MapCode={mapCodeForLog}），本輪暫不派發跨樓層任務", Log.LogType.WARN);
+                return null;
+            }
+
+            var decision = DecideNextCrossFloorAction(crossFloorPending, currentFloor, _pathCalculator, _cooldownTracker);
+            switch (decision.Kind)
+            {
+                case CrossFloorDecisionKind.None:
+                    return null;
+                case CrossFloorDecisionKind.SameFloor:
+                    _mLog.TraceOut($"[CrossFloor] 同樓層任務優先派發：{decision.Task.BeginStation}→{decision.Task.EndStation}", Log.LogType.NONE);
+                    return decision.Task;
+                case CrossFloorDecisionKind.CooldownHit:
+                    _mLog.TraceOut($"[CrossFloor] 冷卻期命中，攔截預調度重派 parent={decision.Task.TaskDateTime}，回傳父任務讓 Dispatch 正常處理", Log.LogType.NONE);
+                    return decision.Task;
+                case CrossFloorDecisionKind.NeedDispatch:
+                    return DispatchCrossFloor(decision.FromFloor, decision.ToFloor, decision.Task.TaskDateTime);
+                default:
+                    return null;
+            }
+        }
+
+        private static oMissionModel FindSystemTask(List<oMissionModel> crossFloorPending)
+        {
+            if (crossFloorPending == null) return null;
+            return crossFloorPending.FirstOrDefault(
+                m => m != null && (m.TaskSource == CROSS_FLOOR_DISPATCH || m.TaskSource == IDLE_RETURN));
         }
 
         /// <summary>
@@ -329,9 +363,20 @@ namespace HikAGVWebAPI.App_Start
             if (!normalTasks.Any())
                 return CrossFloorDecision.None();
 
+            // 車輛樓層無法判定時一律不決策。
+            // 若略過此檢查，下方 sameFloorTask 的 == 比較會在
+            // 「currentFloor 為 null」且「GetFloor(BeginStation) 亦為 null（站點首字母不在對照表）」時
+            // 因 null == null 成立而誤判為同樓層，直接派出起點在別層的任務。
+            if (string.IsNullOrEmpty(currentFloor))
+                return CrossFloorDecision.None();
+
             // 起點與車輛同樓層的任務優先派發（不受冷卻期影響）
+            // 明確排除樓層算不出來的站點，不讓 null 參與相等比較
             var sameFloorTask = normalTasks.FirstOrDefault(m =>
-                pathCalculator.GetFloor(m.BeginStation) == currentFloor);
+            {
+                string beginFloor = pathCalculator.GetFloor(m.BeginStation);
+                return !string.IsNullOrEmpty(beginFloor) && beginFloor == currentFloor;
+            });
 
             if (sameFloorTask != null)
                 return CrossFloorDecision.SameFloor(sameFloorTask);
