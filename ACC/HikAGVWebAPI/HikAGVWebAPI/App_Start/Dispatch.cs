@@ -33,6 +33,8 @@ namespace HikAGVWebAPI
         private Dictionary<string, Dictionary<string, object>> dicLowBattery = new Dictionary<string, Dictionary<string, object>>();//
         private CrossFloorManager _crossFloorManager;
         public static CrossFloorManager CrossFloor { get; private set; }
+        //oShuttle.MapCode 裁決器：同輪去重 + MapCode 變更連續確認，防幽靈回報覆蓋
+        private readonly ShuttleMapCodeResolver _mapCodeResolver = new ShuttleMapCodeResolver();
 
         public Dispatch()
         {
@@ -173,6 +175,13 @@ namespace HikAGVWebAPI
                     .ToArray();
 
 
+                // ── 收集階段 ────────────────────────────────────────────
+                // 不在此直接寫 DB。Update_oShuttle 的 where 只有 ShuttleId，
+                // 同一輪多張地圖回報同一台車時會互相覆蓋（現場 AA,BB,DD,FF → DD 恆勝 BB），
+                // 2026-08-19 客訴即因車在 2F 被 3F 的殘留幽靈筆蓋掉。
+                // 先全部收集，交由 ShuttleMapCodeResolver 裁決後才寫入。
+                var roundReports = new Dictionary<string, List<AGVStatusData>>();
+
                 foreach (var mapCode in mapCodes)
                 {
                     AGVStatusAck AGVAck = GetAGVStatus(mapCode);
@@ -182,6 +191,53 @@ namespace HikAGVWebAPI
                         mLog.TraceOut($"Get All AGV Status Ack Data! {AGVAck?.ToString()}", Log.LogType.NONE);
 
                         foreach (AGVStatusData agvData in AGVAck?.data)
+                        {
+                            if (agvData == null || string.IsNullOrEmpty(agvData.robotCode)) continue;
+
+                            if (!roundReports.ContainsKey(agvData.robotCode))
+                                roundReports[agvData.robotCode] = new List<AGVStatusData>();
+                            roundReports[agvData.robotCode].Add(agvData);
+                        }
+                    }
+
+                    mLog.TraceOut($"========================================== Get AGV Status End! ==========================================", Log.LogType.NONE);
+                }
+
+                // ── 取得 oShuttle.MapCode 現值 ──────────────────────────
+                // 供 Resolver 同步 callback（CallBackAPI → Update_oShuttleMapCode）的直接寫入。
+                var dbMapCodes = new Dictionary<string, string>();
+                try
+                {
+                    foreach (var shuttle in mDB.Select_oShuttle())
+                    {
+                        if (shuttle?.ShuttleId != null)
+                            dbMapCodes[shuttle.ShuttleId] = shuttle.MapCode;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    mLog.TraceOut($"Select oShuttle For MapCode Baseline Failed! [Exception] : {ex.Message}", Log.LogType.WARN);
+                    // 讀不到現值不致命：Resolver 會沿用自身認可值繼續裁決
+                }
+
+                // ── 裁決並寫入階段（每台車只寫一次）────────────────────
+                foreach (var entry in roundReports)
+                {
+                    try
+                    {
+                        string robotCode = entry.Key;
+                        string dbMapCode = dbMapCodes.ContainsKey(robotCode) ? dbMapCodes[robotCode] : null;
+
+                        var resolved = _mapCodeResolver.Resolve(robotCode, entry.Value, dbMapCode);
+
+                        if (resolved.HasConflict)
+                            mLog.TraceOut($"[MapCode] {resolved.ConflictDetail}", Log.LogType.WARN);
+
+                        if (resolved.MapCodeAccepted)
+                            mLog.TraceOut($"[MapCode] ShuttleId={robotCode} MapCode 變更生效：{dbMapCode} → {resolved.AcceptedMapCode}", Log.LogType.NONE);
+
+                        AGVStatusData agvData = resolved.DbRow;
+                        if (agvData != null)
                         {
                             string ShuttleStatus = "I";
                             switch (agvData?.status)
@@ -229,8 +285,12 @@ namespace HikAGVWebAPI
                             CheckBattery(agvData);
                         }
                     }
-
-                    mLog.TraceOut($"========================================== Get AGV Status End! ==========================================", Log.LogType.NONE);
+                    catch (Exception ex)
+                    {
+                        mLog.TraceOut($"Update AGV Data Exception! [ShuttleId] : {entry.Key}, [Exception] : {ex.Message}", Log.LogType.WARN);
+                        // 單台車失敗不中斷整輪：改為收集後統一寫入後，
+                        // 若不攔在這裡，一台車的例外會讓本輪其他車全部沒被更新
+                    }
                 }
 
             }
