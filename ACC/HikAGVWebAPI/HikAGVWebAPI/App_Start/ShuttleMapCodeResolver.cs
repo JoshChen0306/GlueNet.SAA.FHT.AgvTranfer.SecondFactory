@@ -10,7 +10,7 @@ namespace HikAGVWebAPI.App_Start
     public class ShuttleMapCodeResolveResult
     {
         /// <summary>
-        /// 第一段去重勝出的「原始」回報筆（mapCode 保持 RCS 回傳值，未被裁決覆寫）。
+        /// 第一段去重判定的「原始」回報筆（mapCode 保持 RCS 回傳值，未被裁決覆寫）。
         /// 診斷與測試用；實際要寫入 DB 的請用 <see cref="DbRow"/>。
         /// 無候選時為 null。
         /// </summary>
@@ -19,7 +19,7 @@ namespace HikAGVWebAPI.App_Start
         /// <summary>
         /// 實際應寫入 oShuttle 的那一列，其 mapCode 已等於 <see cref="AcceptedMapCode"/>。
         /// 優先取本輪回報中 mapCode 已等於認可值的那筆（避免出現 MapCode 與座標分屬不同地圖的混搭列）；
-        /// 若該地圖本輪沒回報，則複製勝出筆並改寫其 mapCode。
+        /// 若該地圖本輪沒回報，則複製判定筆並改寫其 mapCode。
         /// 無候選時為 null。
         /// </summary>
         public AGVStatusData DbRow { get; set; }
@@ -27,7 +27,7 @@ namespace HikAGVWebAPI.App_Start
         /// <summary>本輪同一 robotCode 是否被多張地圖同時回報</summary>
         public bool HasConflict { get; set; }
 
-        /// <summary>衝突明細（各筆 mapCode/座標與勝出原因），供 WARN log 使用；無衝突時為空字串</summary>
+        /// <summary>衝突明細（各筆 mapCode/座標與判定理由），供 WARN log 使用；無衝突時為空字串</summary>
         public string ConflictDetail { get; set; } = string.Empty;
 
         /// <summary>本輪是否讓 MapCode 變更正式生效（連續確認達標）</summary>
@@ -51,8 +51,8 @@ namespace HikAGVWebAPI.App_Start
     ///
     /// 裁決分兩段：
     ///   第一段 同輪去重：多筆時取「座標與上一輪相比有變動」者（幽靈筆的特徵是座標凍結）；
-    ///                    無法判別時依序黏著 待確認值 → 認可值 → 上一輪勝出值。
-    ///   第二段 連續確認：MapCode 要「變更」需連續 ConfirmCount 輪勝出者皆為同一新值才生效，
+    ///                    無法判別時依序沿用 待確認值 → 認可值 → 上一輪判定值。
+    ///   第二段 連續確認：MapCode 要「變更」需連續 ConfirmCount 輪判定結果皆為同一新值才生效，
     ///                    避免單輪誤判直接寫入 DB。
     ///
     /// 刻意不使用 robotIp 作為判準：該欄位在 ACC 無任何業務用途，
@@ -77,7 +77,7 @@ namespace HikAGVWebAPI.App_Start
         private readonly Dictionary<string, string> _acceptedMapCode
             = new Dictionary<string, string>();
 
-        // robotCode → 上一輪第一段勝出的 mapCode
+        // robotCode → 上一輪第一段判定的 mapCode
         private readonly Dictionary<string, string> _lastWinnerMapCode
             = new Dictionary<string, string>();
 
@@ -129,7 +129,7 @@ namespace HikAGVWebAPI.App_Start
 
             var lastPos = GetLastPositions(robotCode);
 
-            // ── 第一段：同輪去重，挑出勝出筆 ──────────────────────────
+            // ── 第一段：同輪去重，挑出判定筆 ──────────────────────────
             AGVStatusData winner;
             string reason;
             bool mapCodeTrusted = true;
@@ -151,26 +151,26 @@ namespace HikAGVWebAPI.App_Start
                 }
                 else
                 {
-                    // 都變動或都凍結 → 無法由座標判別，依序黏著
+                    // 都變動或都凍結 → 無法由座標判別，依序沿用
                     string pending = GetPendingMapCode(robotCode);
                     string lastWinner = _lastWinnerMapCode.ContainsKey(robotCode) ? _lastWinnerMapCode[robotCode] : null;
 
                     winner = FindByMapCode(reports, pending);
-                    reason = "黏著待確認值";
+                    reason = "沿用待確認值";
 
                     if (winner == null)
                     {
                         winner = FindByMapCode(reports, accepted);
-                        reason = "黏著認可值";
+                        reason = "沿用認可值";
                     }
                     if (winner == null)
                     {
                         winner = FindByMapCode(reports, lastWinner);
-                        reason = "黏著上一輪勝出值";
+                        reason = "沿用上一輪判定值";
                     }
                     if (winner == null)
                     {
-                        // 待確認值 / 認可值 / 上一輪勝出值本輪皆未回報 → 無可信依據
+                        // 待確認值 / 認可值 / 上一輪判定值本輪皆未回報 → 無可信依據
                         // 保守處理：MapCode 維持不變更，也不推進確認計數。
                         // 風險：若此狀態長期持續，MapCode 會停留在舊值；WARN log 每輪皆記錄可供追查。
                         winner = reports[0];
@@ -210,12 +210,19 @@ namespace HikAGVWebAPI.App_Start
                 _lastWinnerMapCode[robotCode] = winner.mapCode;
             }
 
-            // 認可值尚未建立（首輪且 DB 為空）時，直接以勝出筆為準
+            // 認可值尚未建立（首輪且 DB 為空）時，直接以判定筆為準
             if (string.IsNullOrEmpty(accepted))
             {
                 accepted = winner.mapCode;
                 _acceptedMapCode[robotCode] = accepted;
             }
+
+            // 衝突描述必須在更新座標基準「之前」算完。
+            // 否則 BuildConflictDetail 重算變動狀態時會拿本輪值跟本輪值比，
+            // 每筆都得出未變動，log 永遠印「座標凍結」而失去診斷價值。
+            // （2026-08-20 二廠現場 log 發現，決策本身不受影響）
+            if (result.HasConflict)
+                result.ConflictDetail = BuildConflictDetail(robotCode, reports, lastPos, winner, reason, accepted);
 
             // ── 更新座標基準（合併，不清掉本輪未回報的地圖）──────────
             foreach (var r in reports)
@@ -229,9 +236,6 @@ namespace HikAGVWebAPI.App_Start
             result.PendingCount = GetPendingCount(robotCode);
             result.DbRow = BuildDbRow(reports, winner, accepted);
 
-            if (result.HasConflict)
-                result.ConflictDetail = BuildConflictDetail(robotCode, reports, lastPos, winner, reason, accepted);
-
             return result;
         }
 
@@ -240,7 +244,7 @@ namespace HikAGVWebAPI.App_Start
         /// <summary>
         /// 組出要寫入 DB 的那一列。
         /// 優先取本輪回報中 mapCode 已等於認可值的那筆（欄位彼此一致）；
-        /// 找不到才複製勝出筆並改寫 mapCode，避免污染 Winner 供診斷用的原始值。
+        /// 找不到才複製判定筆並改寫 mapCode，避免污染 Winner 供診斷用的原始值。
         /// </summary>
         private static AGVStatusData BuildDbRow(IList<AGVStatusData> reports, AGVStatusData winner, string accepted)
         {
@@ -336,7 +340,7 @@ namespace HikAGVWebAPI.App_Start
                     r.mapCode, r.posX, r.posY,
                     IsPositionChanged(lastPos, r) ? "座標有變動" : "座標凍結");
             }
-            sb.AppendFormat(" → 勝出={0}（{1}），採用 MapCode={2}", winner?.mapCode, reason, accepted);
+            sb.AppendFormat(" → 判斷結果為 {0}（{1}），採用 MapCode={2}", winner?.mapCode, reason, accepted);
             return sb.ToString();
         }
     }

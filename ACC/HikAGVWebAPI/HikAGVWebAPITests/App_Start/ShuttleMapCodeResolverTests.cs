@@ -58,7 +58,7 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         [TestMethod]
-        public void Resolve_同輪多筆_取座標有變動者為勝出並標記衝突()
+        public void Resolve_同輪多筆_取座標有變動者為判定結果並標記衝突()
         {
             // Arrange：先建立上一輪基準（BB=100,200 / DD=500,600）
             var resolver = new ShuttleMapCodeResolver();
@@ -73,7 +73,7 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         [TestMethod]
-        public void Resolve_衝突描述含各筆明細與勝出原因()
+        public void Resolve_衝突描述含各筆明細與判定理由()
         {
             // Arrange
             var resolver = new ShuttleMapCodeResolver();
@@ -87,11 +87,34 @@ namespace HikAGVWebAPITests.App_Start
             StringAssert.Contains(result.ConflictDetail, "BB");
             StringAssert.Contains(result.ConflictDetail, "DD");
             StringAssert.Contains(result.ConflictDetail, "500");
-            // 各筆的判定結果（有變動／凍結）與勝出原因都要在描述裡，
+            // 各筆的判定結果（有變動／凍結）與判定理由都要在描述裡，
             // 否則現場翻 WARN log 只看得到「有衝突」卻不知道為什麼選了這一筆
             StringAssert.Contains(result.ConflictDetail, "座標凍結");
             StringAssert.Contains(result.ConflictDetail, "座標有變動");
-            StringAssert.Contains(result.ConflictDetail, "勝出=BB");
+            StringAssert.Contains(result.ConflictDetail, "判斷結果為 BB");
+        }
+
+        /// <summary>
+        /// 迴歸測試：2026-08-20 二廠現場 log 發現診斷訊息永遠印「座標凍結」。
+        /// 原因是 ConflictDetail 在 lastPos 已被更新為本輪值之後才計算，
+        /// 導致重算變動狀態時比對到自己，每筆都得出未變動。
+        /// 決策本身用的是更新前的基準故不受影響，但這行 log 的用途正是
+        /// 讓人判讀「為什麼選了這一筆」，標示全錯等於失去診斷價值。
+        /// </summary>
+        [TestMethod]
+        public void Resolve_衝突描述須如實標示各筆的變動與凍結()
+        {
+            // Arrange：建立基準 BB=(100,200)、DD=(500,600)
+            var resolver = new ShuttleMapCodeResolver();
+            resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "BB");
+
+            // Act：BB 移動到 (111,222)，DD 仍停在 (500,600)
+            var result = resolver.Resolve(Robot, Reports(Report("BB", "111", "222"), Report("DD", "500", "600")), "BB");
+
+            // Assert：BB 該標有變動、DD 該標凍結，兩者不得都是凍結
+            Assert.IsTrue(result.HasConflict);
+            StringAssert.Contains(result.ConflictDetail, "[BB pos=111,222 座標有變動]");
+            StringAssert.Contains(result.ConflictDetail, "[DD pos=500,600 座標凍結]");
         }
 
         #endregion Happy Path
@@ -99,10 +122,10 @@ namespace HikAGVWebAPITests.App_Start
         #region Edge Case — 去重規則
 
         [TestMethod]
-        public void Resolve_同輪多筆皆凍結_黏著上一輪認可值()
+        public void Resolve_同輪多筆皆凍結_沿用上一輪認可值()
         {
             // Arrange：認可值為 BB，且 BB/DD 兩張地圖都先建立基準
-            //（若只建 BB 的基準，下一輪 DD 會因「首次出現」被視為有變動而勝出，
+            //（若只建 BB 的基準，下一輪 DD 會因「首次出現」被視為有變動而成為判定結果，
             //  那會變成在測「新地圖出現」而非本案例要測的「皆凍結」）
             var resolver = new ShuttleMapCodeResolver();
             resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "BB");
@@ -115,7 +138,7 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         [TestMethod]
-        public void Resolve_同輪多筆皆變動_黏著上一輪認可值()
+        public void Resolve_同輪多筆皆變動_沿用上一輪認可值()
         {
             // Arrange：認可值為 BB，且 BB/DD 兩張地圖都先建立基準（理由同上一個案例）
             var resolver = new ShuttleMapCodeResolver();
@@ -129,7 +152,7 @@ namespace HikAGVWebAPITests.App_Start
         }
 
         [TestMethod]
-        public void Resolve_地圖首次出現_視為有變動而勝出()
+        public void Resolve_地圖首次出現_視為有變動而成為判定結果()
         {
             // Arrange：只有 DD 有基準，且 DD 凍結
             var resolver = new ShuttleMapCodeResolver();
@@ -138,13 +161,13 @@ namespace HikAGVWebAPITests.App_Start
             // Act：BB 首次出現，DD 凍結
             var result = resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "DD");
 
-            // Assert：勝出者應為新出現的 BB（但因需連續確認，AcceptedMapCode 仍為 DD）
+            // Assert：判定結果應為新出現的 BB（但因需連續確認，AcceptedMapCode 仍為 DD）
             Assert.AreEqual("BB", result.Winner.mapCode);
             Assert.AreEqual("DD", result.AcceptedMapCode);
         }
 
         [TestMethod]
-        public void Resolve_黏著目標本輪未回報_MapCode維持不變更()
+        public void Resolve_沿用目標本輪未回報_MapCode維持不變更()
         {
             // Arrange：認可值為 FF
             var resolver = new ShuttleMapCodeResolver();
@@ -169,7 +192,7 @@ namespace HikAGVWebAPITests.App_Start
             var resolver = new ShuttleMapCodeResolver(confirmCount: 3);
             resolver.Resolve(Robot, Reports(Report("DD", "500", "600")), "DD");
 
-            // Act & Assert：連續三輪勝出者皆為 BB
+            // Act & Assert：連續三輪判定結果皆為 BB
             var r1 = resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "DD");
             Assert.AreEqual("DD", r1.AcceptedMapCode, "第 1 輪不得生效");
             Assert.AreEqual(1, r1.PendingCount);
@@ -192,7 +215,7 @@ namespace HikAGVWebAPITests.App_Start
             resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "DD");
             resolver.Resolve(Robot, Reports(Report("BB", "100", "200"), Report("DD", "500", "600")), "DD");
 
-            // Act：勝出者換成 FF（首次出現視為有變動，DD 凍結、BB 也凍結）
+            // Act：判定結果換成 FF（首次出現視為有變動，DD 凍結、BB 也凍結）
             var result = resolver.Resolve(Robot, Reports(Report("FF", "900", "900"), Report("DD", "500", "600")), "DD");
 
             // Assert
@@ -277,7 +300,7 @@ namespace HikAGVWebAPITests.App_Start
             resolver.Resolve(Robot, Reports(Report("BB", "270749", "269995", "R"), Report("DD", "254312", "207558")), "BB");
             resolver.Resolve(Robot, Reports(Report("BB", "270244", "269997", "R"), Report("DD", "254312", "207558")), "BB");
 
-            // 11:29:14 DD 鏡像 BB 座標後再度凍結（兩筆同時變動 → 黏著 BB）
+            // 11:29:14 DD 鏡像 BB 座標後再度凍結（兩筆同時變動 → 沿用 BB）
             resolver.Resolve(Robot, Reports(Report("BB", "270072", "269997", "R"), Report("DD", "270072", "269997", "R")), "BB");
             resolver.Resolve(Robot, Reports(Report("BB", "269814", "270015", "R"), Report("DD", "270072", "269997", "R")), "BB");
             resolver.Resolve(Robot, Reports(Report("BB", "269189", "269990", "R"), Report("DD", "270072", "269997", "R")), "BB");
